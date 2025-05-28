@@ -1,1 +1,2 @@
-xD
+<h1>Welcome to My GitHub Page</h1>
+<p>Hi, I'm Ben. I'm passionate about building powerful tools and apps that push the limits of technology. Explore my projects, follow along, and feel free to reach out!</p>
