@@ -251,7 +251,12 @@
 
 <div class="aurora"></div>
 
-<header id="top">
+<!-- Anchor for "back to top" links. It must NOT live on the sticky header:
+     a stuck element's current position is wherever you've scrolled to, so
+     navigating to it scrolls zero pixels. -->
+<span id="top"></span>
+
+<header>
   <div class="wrap nav">
     <a class="brand" href="#top"><span class="mark">X</span> xereon</a>
     <nav>
