@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ben — xereon</title>
-<meta name="description" content="Ben (xereon) — coder and creator. Browser-based audio visualizers, IPTV apps, social platforms, and other open-source experiments.">
+<meta name="description" content="Ben (xereon) — coder and creator. Real-time messaging, browser-based audio visualizers, IPTV apps, social platforms, and other open-source experiments.">
 <meta property="og:title" content="Ben — xereon">
 <meta property="og:description" content="Coder, creator, and explorer of all things tech. Open-source projects you can run in a browser.">
 <meta property="og:type" content="website">
@@ -181,6 +181,7 @@
   .feat:hover::after{opacity:1}
   .feat > *{position:relative}
 
+  .feat.wide{grid-column:1/-1}
   .feat .top{display:flex;align-items:center;gap:11px;margin-bottom:12px}
   .emoji{font-size:26px;line-height:1}
   .feat h3{margin:0;font-size:1.28rem;letter-spacing:-.02em;font-weight:660}
@@ -188,6 +189,9 @@
     margin-left:auto;font-size:11px;font-weight:640;letter-spacing:.09em;text-transform:uppercase;
     color:#4ade80;border:1px solid rgba(74,222,128,.32);background:rgba(74,222,128,.09);
     padding:3px 9px;border-radius:999px;white-space:nowrap;
+  }
+  .live.new{
+    color:var(--accent-2);border-color:rgba(34,211,238,.32);background:rgba(34,211,238,.08);
   }
   .feat p{margin:0 0 18px;color:var(--muted);font-size:14.8px;flex:1}
   .tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px}
@@ -269,9 +273,9 @@
     <div class="tagline"><span class="dot"></span> Building in the open</div>
     <h1>Hey, I'm Ben.<br><span class="grad">I build things for the browser.</span></h1>
     <p class="lede">
-      Coder, creator, and explorer of all things tech. I like projects that run with
-      <strong>no build step and no backend</strong> — open a URL and it just works.
-      Audio visualizers, streaming apps, social platforms, and whatever I'm curious about next.
+      Coder, creator, and explorer of all things tech. I like projects with
+      <strong>no build step and nothing to install</strong> — clone or open a URL and it just works.
+      Audio visualizers, streaming apps, a real-time messenger, and whatever I'm curious about next.
     </p>
     <div class="cta">
       <a class="btn primary" href="#work">
@@ -280,7 +284,7 @@
       </a>
       <a class="btn" href="https://github.com/xereon?tab=repositories">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.9 5.33.9 11.6c0 4.9 3.17 9.06 7.57 10.53.55.1.75-.24.75-.53l-.01-1.86c-3.08.67-3.73-1.49-3.73-1.49-.5-1.28-1.23-1.62-1.23-1.62-1.01-.69.08-.67.08-.67 1.11.08 1.7 1.14 1.7 1.14.99 1.7 2.6 1.21 3.23.93.1-.72.39-1.21.7-1.49-2.46-.28-5.05-1.23-5.05-5.48 0-1.21.43-2.2 1.14-2.98-.11-.28-.49-1.41.11-2.94 0 0 .93-.3 3.05 1.14a10.6 10.6 0 0 1 5.56 0c2.12-1.44 3.05-1.14 3.05-1.14.6 1.53.22 2.66.11 2.94.71.78 1.14 1.77 1.14 2.98 0 4.26-2.6 5.2-5.07 5.47.4.35.76 1.03.76 2.08l-.01 3.08c0 .3.2.64.76.53 4.4-1.47 7.56-5.63 7.56-10.53C23.1 5.33 18.27.5 12 .5Z"/></svg>
-        43 repositories
+        44 repositories
       </a>
     </div>
   </section>
@@ -290,6 +294,31 @@
     <p class="sec-note">Recent builds — both run entirely in your browser, right now.</p>
 
     <div class="featured">
+
+      <a class="feat wide reveal" href="https://github.com/xereon/advanced-messaging-app">
+        <div class="top">
+          <span class="emoji">💬</span>
+          <h3>RELAY</h3>
+          <span class="live new">New · v2.0.0</span>
+        </div>
+        <p>
+          An accessible, real-time messaging app with zero runtime dependencies — plain
+          HTML/CSS/JS on the front end, Node's own http, sqlite and crypto on the back.
+          Passkey sign-in with real WebAuthn verification, live sync over Server-Sent Events,
+          attachments, and ten WCAG-AA themes including colour-blind-safe palettes.
+          Clone it and <code style="font-size:.9em">npm start</code> — no install, no build step.
+        </p>
+        <div class="tags">
+          <span class="tag">Node.js</span><span class="tag">SQLite</span>
+          <span class="tag">WebAuthn</span><span class="tag">SSE</span>
+          <span class="tag">WCAG AA</span><span class="tag">Zero deps</span>
+          <span class="tag">117 tests</span>
+        </div>
+        <div class="links">
+          <span>View source →</span>
+          <span class="ghost">Release notes</span>
+        </div>
+      </a>
 
       <a class="feat reveal" href="https://xereon.github.io/spectra-visualizer/">
         <div class="top">
@@ -341,6 +370,12 @@
     <p class="sec-note">Other things I've built and published.</p>
 
     <div class="repos">
+
+      <a class="repo reveal" href="https://github.com/xereon/advanced-messaging-app">
+        <div class="name">advanced-messaging-app <span class="arrow">↗</span></div>
+        <p>Relay — accessible real-time messaging. Node + SQLite, passkeys, SSE sync, zero dependencies.</p>
+        <div class="meta"><span class="lang"><i class="swatch" style="background:#f1e05a"></i>JavaScript</span></div>
+      </a>
 
       <a class="repo reveal" href="https://github.com/xereon/spectra-visualizer">
         <div class="name">spectra-visualizer <span class="arrow">↗</span></div>
