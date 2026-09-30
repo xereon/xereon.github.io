@@ -38,6 +38,31 @@ if (opt['list-poses']) {
   process.exit(0);
 }
 
+// ---- cross-process semaphore: at most SLOTS concurrent headless browsers ------------------
+// SwiftShader is CPU-bound; many agents screenshotting at once would thrash the box.
+const SLOTS = +process.env.DUST2_SHOT_SLOTS || 2;
+const LOCKDIR = '/tmp/dust2-shot-locks';
+fs.mkdirSync(LOCKDIR, { recursive: true });
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+let myLock = null;
+for (let waited = 0; !myLock; waited++) {
+  for (let i = 0; i < SLOTS && !myLock; i++) {
+    const f = path.join(LOCKDIR, `slot${i}.lock`);
+    try { fs.writeFileSync(f, String(process.pid), { flag: 'wx' }); myLock = f; }
+    catch {
+      const pid = +fs.readFileSync(f, 'utf8').trim();
+      if (!pid || !alive(pid)) { try { fs.unlinkSync(f); } catch {} }
+    }
+  }
+  if (!myLock) {
+    if (waited === 0) console.error('[shot] waiting for a free render slot…');
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+const releaseLock = () => { try { if (myLock && fs.readFileSync(myLock, 'utf8').trim() === String(process.pid)) fs.unlinkSync(myLock); } catch {} };
+process.on('exit', releaseLock);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { releaseLock(); process.exit(130); });
+
 const W = +opt.w || 1600, H = +opt.h || 900;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' };
 

@@ -6,14 +6,17 @@ export const RAD = 180 / Math.PI;
 
 const _e = new THREE.Euler(0, 0, 0, 'YXZ');
 
-/** yaw 0 looks down -Z, increases CCW from above. pitch positive looks DOWN. */
+/**
+ * Source angle convention on Three axes: yaw 0 looks toward +X (Source east), yaw 90 looks
+ * toward -Z (Source north, +Y_src). pitch positive looks DOWN. See CONTRACT.md §1.
+ */
 export function angleVectors(pitch, yaw, out = {
   forward: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(),
 }) {
   const p = pitch * DEG, y = yaw * DEG;
   const cp = Math.cos(p), sp = Math.sin(p), cy = Math.cos(y), sy = Math.sin(y);
-  out.forward.set(-sy * cp, -sp, -cy * cp);
-  out.right.set(cy, 0, -sy);
+  out.forward.set(cy * cp, -sp, -sy * cp);
+  out.right.set(sy, 0, cy);
   out.up.crossVectors(out.right, out.forward).normalize();
   return out;
 }
@@ -21,14 +24,18 @@ export function angleVectors(pitch, yaw, out = {
 /** Horizontal-only forward/right (for movement). */
 export function flatVectors(yaw, fwd, right) {
   const y = yaw * DEG;
-  fwd.set(-Math.sin(y), 0, -Math.cos(y));
-  right.set(Math.cos(y), 0, -Math.sin(y));
+  fwd.set(Math.cos(y), 0, -Math.sin(y));
+  right.set(Math.sin(y), 0, Math.cos(y));
 }
 
 export function applyViewAngles(obj, pitch, yaw, roll = 0) {
-  _e.set(-pitch * DEG, yaw * DEG, roll * DEG, 'YXZ');
+  _e.set(-pitch * DEG, (yaw - 90) * DEG, -roll * DEG, 'YXZ');
   obj.quaternion.setFromEuler(_e);
 }
+
+/** Source world coords (x east, y north, z up) -> Three (x, y up, z south). */
+export const fromSource = (x, y, z, out = new THREE.Vector3()) => out.set(x, z, -y);
+export const toSource = (v) => [v.x, -v.z, v.y];
 
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;

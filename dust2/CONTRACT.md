@@ -43,13 +43,23 @@ We use **Source engine units** (1 unit = 1 inch = 0.0254 m) with **Three.js Y-up
 | Camera near / far | `1` / `12000` |
 | Default FOV | `90` (viewmodel FOV `68`) |
 
-Angles: `yaw` is rotation about `+Y`, **degrees**, 0 = looking down `-Z`, increasing
-counter-clockwise viewed from above. `pitch` is **degrees**, positive = looking **down**
-(Source convention). Conversion helpers live in `src/core/mathx.js`:
+**Coordinates map 1:1 to real Source/Hammer coordinates** through a fixed rotation, so any
+known de_dust2 `setpos x y z` / `setang p y r` can be used directly:
+
+```
+Three (x, y, z)  =  Source (x, z, -y)          // Source: x east, y north, z up
+fromSource(x, y, z) -> Vector3,  toSource(v) -> [x, y, z]      (src/core/mathx.js)
+```
+
+Angles use **Source's convention exactly**: `yaw` in degrees about `+Y`, **0 = +X (east),
+90 = -Z (north)**, increasing counter-clockwise from above. `pitch` in degrees, **positive
+looks down**. So `setang 5 90 0` in CS is `{ pitch: 5, yaw: 90 }` here. Helpers in
+`src/core/mathx.js`:
 
 ```js
-angleVectors(pitch, yaw) -> { forward: Vector3, right: Vector3, up: Vector3 }
-applyViewAngles(camera, pitch, yaw, roll)   // sets camera.quaternion
+angleVectors(pitch, yaw) -> { forward, right, up }   // forward(0,0) = +X
+flatVectors(yaw, fwd, right)                          // horizontal only
+applyViewAngles(camera, pitch, yaw, roll)             // sets camera.quaternion
 ```
 
 ---
@@ -112,7 +122,7 @@ Canonical events:
 
 ---
 
-## 3. Collision — `src/player/collision.js` (owner: physics agent)
+## 3. Collision — `src/player/collision.js` (owner: lead — tested; request changes, do not edit)
 
 Source-style brush world. A brush is a **convex volume defined by planes**; a point `p`
 is inside when `dot(n, p) + d <= 0` for every plane.
@@ -259,7 +269,9 @@ export class WeaponSystem {
   reload(ent)
   switchTo(ent, key)
   drop(ent)
+  give(ent, key)           // buy menu / spawn loadout; handles slots + replacing
   currentInaccuracy(ent) -> degrees
+  viewmodel                // Viewmodel instance (§13), created by WeaponSystem
 }
 ```
 
@@ -321,3 +333,110 @@ uncaught exception, so a green screenshot also means a clean console.
 
 `--probe name` dumps JSON diagnostics instead of a PNG (draw calls, triangles, frame ms,
 texture memory) so you can check budgets.
+
+---
+
+## 11. Entities — `src/player/player.js` (owner: movement agent)
+
+Local player and bots are the **same class** running the **same movement code** (as in
+Source). Bots differ only in where their usercmds come from.
+
+```js
+export class Player {
+  // identity
+  name, team /* 'T'|'CT' */, isBot, isLocal, id
+  // state
+  alive, health, armor, helmet, money, defuser
+  origin /* feet */, velocity, pitch, yaw, onGround, ducking, duckAmount /* 0..1 */
+  eyeHeight            // current (animated) eye height above origin
+  eyePos(out) -> Vector3
+  viewPunch, aimPunch  // {pitch, yaw}; WeaponSystem writes, Player decays + applies to view
+  // weapons — WeaponSystem owns the contents
+  inventory: { primary, secondary, knife, grenades: [], c4, taser }, active
+  // third-person
+  model                // CharacterModel from src/player/character.js (null for local 1P)
+
+  setPose(eyePos, pitch, yaw)
+  runCommand(cmd, dt)          // Source PlayerMove: friction, accel, airaccel, duck, stairs
+  frame(dt, alpha)             // local: camera + bob + punch; remote: model.update
+  takeDamage(info)             // info = { amount, hitgroup, attacker, weapon, point, dir, armorPen }
+  die(info)
+  respawn(spawn)
+  rayHit(start, dir, maxDist)  // delegates to hitboxes -> { t, hitgroup, point, normal } | null
+}
+
+export function createPlayer({ team, isBot, name }) -> Player   // registers in World.entities
+export function createLocalPlayer(team) -> Player
+```
+
+Camera: `Player.frame` for the local player sets `World.camera` from eye position, view
+angles, `viewPunch` and landing/duck smoothing. If `World.cameraOverride` is set (harness),
+it must place the player at the override pose and **still render the viewmodel**.
+
+## 12. Characters — `src/player/character.js`, `src/player/hitboxes.js` (owner: character agent)
+
+```js
+export function createCharacterModel(team, variant) -> CharacterModel
+// CharacterModel = {
+//   root: THREE.Object3D,               // added to World.scene by the Player
+//   update(ent, dt),                    // pose from ent: yaw, pitch (aim), velocity, ducking,
+//                                       // onGround, active weapon, fire/reload events
+//   worldHitboxes(ent) -> Hitbox[],     // posed this frame
+//   ragdoll(impulseDir, force, hitgroup),
+//   dispose(),
+// }
+export function rayVsHitboxes(hitboxes, start, dir, maxDist) -> { t, hitgroup, point, normal } | null
+```
+
+Hitboxes are **oriented capsules** that follow the animated skeleton (head sphere-capsule,
+neck, chest, stomach, pelvis, upper/lower arms, upper/lower legs) — never a single AABB.
+
+## 13. Viewmodel — `src/weapons/viewmodel.js` (owner: viewmodel agent)
+
+```js
+export class Viewmodel {
+  constructor(viewScene, viewCamera)
+  setWeapon(key)                      // builds/caches the procedural weapon+arms mesh
+  play(anim)                          // 'draw' 'idle' 'fire' 'fire_last' 'reload' 'reload_empty'
+                                      // 'inspect' 'melee' 'melee_heavy' 'pin' 'throw' 'zoom_in'
+  update(dt, ent)                     // sway from mouse delta, bob from velocity, land kick,
+                                      // crouch offset; reads ent.viewPunch
+  muzzleWorld(out) -> Vector3         // muzzle position in WORLD space (for tracers/flash)
+  ejectWorld(out) -> Vector3          // ejection port in WORLD space (for shells)
+}
+```
+
+## 14. Effects — `src/fx/index.js` (owner: FX agent)
+
+```js
+export class FX {
+  update(dt)
+  muzzleFlash(worldPos, dir, key, opts = { viewmodel: false })
+  tracer(from, to, key)
+  impact(point, normal, surface)      // also triggered automatically by 'impact' events
+  blood(point, dir, amount)
+  shell(pos, vel, key)                // brass ejection with bounce + tink sound event
+  decal(point, normal, type, size)
+  smoke(pos) -> handle                // smoke grenade volume, ~18 s, blocks LOS
+  flash(pos)                          // flashbang; computes blindness for every entity
+  explosion(pos)                      // HE
+  fire(pos, normal) -> handle         // molotov / incendiary pool, ~7 s
+  blindAmount(ent) -> 0..1            // HUD whiteout + bot blindness
+  smokeOcclusion(from, to) -> 0..1    // bots + audio use this for LOS
+}
+```
+
+## 15. Audio — `src/audio/audio.js` (owner: audio agent)
+
+```js
+export class Audio {
+  unlock()                            // call from a user gesture (menu click)
+  play(name, opts)                    // 2D: UI, local-player weapon
+  playAt(name, pos, opts)             // 3D HRTF, distance + occlusion (rayTrace MASK_VISIBLE)
+  update(dt)                          // listener follows World.camera
+}
+```
+Audio subscribes to World events (`fire`, `footstep`, `impact`, `damage`, `death`,
+`bomb_*`, `round_*`, `buy`) itself — other modules just emit events. Sound names follow
+`weapon_<key>_fire`, `footstep_<surface>`, `impact_<surface>`, `hit_head`, `bomb_beep`, etc.
+Everything is synthesised with WebAudio (no sample files).
