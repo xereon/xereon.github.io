@@ -46,7 +46,7 @@ const _up = new THREE.Vector3(0, 1, 0), _z = new THREE.Vector3(0, 0, 1);
 
 export class Shells {
   constructor(scene) {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.75, roughness: 0.32 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.55, roughness: 0.28, emissive: 0x1a1206 });
     this.mesh = new THREE.InstancedMesh(casingGeometry(), mat, MAX);
     this.mesh.name = 'fx-shells';
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -141,7 +141,7 @@ export class Shells {
           if (wl > 1e-3) { _q.setFromAxisAngle(_ax.copy(s.w).multiplyScalar(1 / wl), wl * dt); s.q.premultiply(_q); }
         }
       }
-      _s.set(s.cls.rad * scale, s.cls.rad * scale, s.cls.len * scale);
+      _s.set(s.cls.rad * scale * 1.25, s.cls.rad * scale * 1.25, s.cls.len * scale * 1.25);
       // centre the casing on its position
       _p.set(0, 0, -0.5 * s.cls.len * scale).applyQuaternion(s.q).add(s.pos);
       _m.compose(_p, s.q, _s);

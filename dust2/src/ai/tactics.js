@@ -415,7 +415,8 @@ export class TeamBrain {
   _guardBomb(bot, now) {
     const bomb = this.mgr.bomb, intel = this.intel;
     // the bomb doesn't care whose side you're on: clear out before it blows
-    if (bomb.timeLeft(now) < 8.5 && !(bot.target && bot.targetMem?.visible)) {
+    const tl = bomb.timeLeft(now);
+    if (tl < 10 && (tl < 5 || !(bot.target && bot.targetMem?.visible))) {
       const f = this._fleeSpot(bot);
       if (f) { bot.task = 'flee'; bot.setGoal('flee', f, { radius: 120 }); return; }
     }

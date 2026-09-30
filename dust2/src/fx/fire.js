@@ -7,7 +7,7 @@ import { PF } from './particles.js';
 import { SPR } from './atlas.js';
 import { sunVisibility } from './util.js';
 
-export const FIRE = { SPACING: 26, RADIUS: 125, MAXCELLS: 72, SPREAD_SPEED: 230, LIFE: 7.0, MAX: 4 };
+export const FIRE = { SPACING: 30, RADIUS: 125, MAXCELLS: 64, SPREAD_SPEED: 230, LIFE: 7.0, MAX: 4 };
 const MASK = 1;
 const NDX = [1, -1, 0, 0, 1, 1, -1, -1], NDZ = [0, 0, 1, -1, 1, -1, 1, -1];
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -119,7 +119,13 @@ export class FireVolume {
     return this;
   }
 
-  extinguish(now) {
+  /** Gameplay says the fire is over: let the flames die down naturally. */
+  stop(now = this.sys.fx.now) {
+    if (!this.active || this.extT >= 0) return;
+    if (this.tEnd > now + 0.8) this.tEnd = now + 0.8;
+  }
+
+  extinguish(now = this.sys.fx.now) {
     if (!this.active || this.extT >= 0) return;
     this.extT = now;
     this.tEnd = now + 0.6;
@@ -148,24 +154,27 @@ export class FireVolume {
     if (!this.active) return;
     if (now > this.tEnd + 0.1) { this.active = false; this.sys.fx.lights.release(this); return; }
     const fx = this.sys.fx, S = fx.pool.spec, R = this.rand, pool = fx.pool;
-    const rate = 0.11 / Math.max(0.35, fx.scale);
+    const rate = 0.15 / Math.max(0.35, fx.scale);
     for (let i = 0; i < this.n; i++) {
       if (!this.cellBurning(i, now)) continue;
       this.acc[i] += dt;
       const o = i * 4;
       const age = now - this.cells[o + 3];
-      const intensity = Math.min(1, age * 3) * (this.extT >= 0 ? 0.4 : 1);
+      // patchy: each cell has its own strength and slow pulse
+      const cellK = 0.55 + 0.45 * Math.sin(i * 12.9898 + 1.3) ** 2;
+      const pulse = 0.85 + 0.15 * Math.sin(now * (1.3 + (i % 5) * 0.37) + i);
+      const intensity = Math.min(1, age * 3) * (this.extT >= 0 ? 0.4 : 1) * cellK * pulse;
       while (this.acc[i] > rate) {
         this.acc[i] -= rate;
         S.reset();
-        const sz = (9 + R() * 8) * (0.7 + 0.3 * intensity);
-        S.pos.set(this.cells[o] + (R() - 0.5) * 18, this.cells[o + 1] + sz * 0.72, this.cells[o + 2] + (R() - 0.5) * 18);
+        const sz = (12 + R() * 9) * (0.6 + 0.4 * intensity);
+        S.pos.set(this.cells[o] + (R() - 0.5) * 22, this.cells[o + 1] + sz * 0.8, this.cells[o + 2] + (R() - 0.5) * 22);
         S.vel.set((R() - 0.5) * 10, 18 + R() * 30, (R() - 0.5) * 10);
         S.gravity = -0.06; S.drag = 0.6;
         S.life = 0.5 + R() * 0.45;
         S.size0 = sz; S.size1 = sz * (1.15 + R() * 0.3);
         S.rot = (R() - 0.5) * 0.35;
-        S.c0.set(0.8 + R() * 0.25, 1.05 * intensity, 0, 0.95); S.c1.set(0.65, 0.7 * intensity, 0, 0.9);
+        S.c0.set(0.75 + R() * 0.3 * intensity, 1.0, 0, 0.95); S.c1.set(0.6, 0.8, 0, 0.9);
         S.sprite = SPR.FIRE0; S.frames = 16;
         S.flags = PF.FIRE | PF.ADD | PF.SOFT;
         S.fadeIn = 0.06; S.fadeOut = 0.6; S.floorY = this.cells[o + 1] - 2;

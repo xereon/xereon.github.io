@@ -44,6 +44,7 @@ const SLOT_ORDER = ['primary', 'secondary', 'knife', 'taser', 'grenade', 'c4'];
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _mz = new THREE.Vector3(), _ej = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
+const VM_TRUE = Object.freeze({ viewmodel: true }), VM_FALSE = Object.freeze({ viewmodel: false });
 const _av = { forward: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3() };
 const _t = { pitch: 0, yaw: 0 }, _dv = { pitch: 0, yaw: 0 };
 const _rand = new Rand(1);
@@ -459,7 +460,7 @@ export class WeaponSystem {
     });
     const fp = this._fpGun(ent);
     fireBullet(ent, inst, seed, shotIndex, { inaccuracy: inacc, spread, muzzle, tracer, recoilIndex: inst.recoilIndex,
-      tracerOpts: fp ? { viewmodel: true } : undefined });
+      tracerOpts: fp ? VM_TRUE : VM_FALSE });
 
     const fx = World.fx;
     if (fx?.muzzleFlash) {
@@ -579,7 +580,7 @@ export class WeaponSystem {
     const vel = new THREE.Vector3().copy(_av.right).multiplyScalar(110 + Math.random() * 40)
       .addScaledVector(_av.up, 70 + Math.random() * 30).addScaledVector(_av.forward, -15 + Math.random() * 20);
     if (ent.velocity) vel.add(ent.velocity);
-    try { fx.shell(pos.clone(), vel, inst.key); } catch (err) { console.error('[weapons] fx.shell threw', err); }
+    try { fx.shell(pos.clone(), vel, inst.key, this._fpGun(ent) ? VM_TRUE : VM_FALSE); } catch (err) { console.error('[weapons] fx.shell threw', err); }
   }
 
   // ============================================================================ knife

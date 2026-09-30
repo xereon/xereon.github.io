@@ -12,11 +12,14 @@ vec2 spriteOrigin(float s) {
   float m = s - 32.0;
   return vec2(0.0, 0.5) + vec2(mod(m, 8.0), floor(m / 8.0)) * 0.125;
 }
+// Blackbody-ish ramp: dark red -> orange -> yellow -> pale, mild HDR at the top.
 vec3 fireRamp(float T) {
-  vec3 c = vec3(1.0, 0.22, 0.03) * smoothstep(0.0, 0.3, T)
-         + vec3(0.0, 0.42, 0.1) * smoothstep(0.22, 0.65, T)
-         + vec3(0.15, 0.28, 0.42) * smoothstep(0.6, 1.0, T);
-  return c * (0.35 + T * T * 5.0);
+  T = clamp(T, 0.0, 1.0) * 4.0;
+  vec3 c1 = vec3(0.3, 0.045, 0.01), c2 = vec3(1.05, 0.3, 0.04), c3 = vec3(2.0, 0.92, 0.17), c4 = vec3(3.1, 2.1, 0.75);
+  if (T < 1.0) return c1 * T;
+  if (T < 2.0) return mix(c1, c2, T - 1.0);
+  if (T < 3.0) return mix(c2, c3, T - 2.0);
+  return mix(c3, c4, T - 3.0);
 }
 `;
 

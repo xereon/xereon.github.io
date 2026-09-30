@@ -27,7 +27,7 @@ import { Flash } from './flash.js';
 import { impactFx, bloodFx, feetDust } from './impacts.js';
 import { muzzleFx } from './muzzle.js';
 import { explosionFx } from './explosion.js';
-import { viewmodelToWorldMatched } from './util.js';
+import { viewmodelToWorldMatched, fpPoint } from './util.js';
 
 defCvar('fx_particles', 1, 0.25, 2, 'particle count multiplier');
 defCvar('fx_muzzle_light', 1, 0, 1, 'dynamic light from muzzle flashes');
@@ -51,6 +51,7 @@ export class FX {
     this.rand = rng(this.seed);
     this.scale = 1;
     this.shake = 0;
+    this.epoch = 0;   // bumps every simulated frame: renderers caching static frames should include it
     this.flashAfterimage = null;
     this._shooter = new THREE.Vector3();
     this._shooterOk = false;
@@ -92,7 +93,6 @@ export class FX {
       World.on('footstep', (e) => this._onFootstep(e)),
       World.on('land', (e) => this._onLand(e)),
       World.on('round_start', () => this.reset(false)),
-      World.on('bomb_exploded', (e) => { const p = e?.pos || e?.position; if (p) this.explosion(p, { scale: 2.2 }); }),
     ];
     scanLights(true);
   }
@@ -104,6 +104,7 @@ export class FX {
   update(dt) {
     if (World.paused) dt = 0;
     this.now += dt;
+    if (dt > 0) this.epoch = (this.epoch + 1) % 1e6;
     shared.uTime.value = this.now;
     shared.uEmissive.value = this.cvar('fx_emissive', 1);
     this.depth.enabled = this.cvar('fx_softparticles', 1) > 0;
@@ -136,7 +137,8 @@ export class FX {
     // the local player's muzzle sits in viewmodel space: start where it appears on screen
     let a = from;
     const cam = World.camera;
-    if (cam && (opts?.viewmodel || (cam.position.distanceToSquared(from) < 70 * 70))) a = viewmodelToWorldMatched(from, _v);
+    if (opts?.viewmodel) { fpPoint(from, _w, _v); a = _v; }
+    else if (opts?.viewmodel === undefined && cam && cam.position.distanceToSquared(from) < 70 * 70) a = viewmodelToWorldMatched(from, _v);
     this.smokes.cut(a, to, this.now);
     this.tracers.spawn(this.now, a, to, {
       speed: this.cvar('fx_tracer_speed', 9000),
@@ -164,9 +166,10 @@ export class FX {
   shell(pos, vel, key, opts) {
     if (!pos) return;
     const cam = World.camera;
-    const vm = opts?.viewmodel ?? (cam && cam.position.distanceToSquared(pos) < 48 * 48);
-    const p = vm ? viewmodelToWorldMatched(pos, _v) : _v.copy(pos);
-    this.shells.spawn(this.now, p, vel || _w.set(0, 120, 0), key, this.rand);
+    let p = _v.copy(pos);
+    if (opts?.viewmodel) fpPoint(pos, _w, _v);
+    else if (opts?.viewmodel === undefined && cam && cam.position.distanceToSquared(pos) < 48 * 48) viewmodelToWorldMatched(pos, _v);
+    this.shells.spawn(this.now, p, vel || _n.set(0, 120, 0), key, this.rand);
   }
 
   decal(point, normal, type = 'bullet_concrete', size = 0) {
@@ -260,7 +263,7 @@ export class FX {
     const ent = e?.ent;
     const pos = e?.pos || ent?.origin;
     if (!pos || ent === World.local) return;
-    const speed = Math.abs(e.speed ?? e.velocity ?? 300);
+    const speed = Math.abs(e.fallSpeed ?? e.speed ?? 300);
     feetDust(this, pos, e.surface || 'sand', Math.min(1, speed / 500));
   }
 

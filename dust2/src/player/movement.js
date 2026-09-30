@@ -611,8 +611,8 @@ export class GameMovement {
     if (!cv.sv_enablebunnyhopping) this.preventBunnyJumping();
 
     this.setGround(null);
-    this._emitStep(1.0, 'jump');
-    World.emit('jump', { ent: p });
+    this._emitStep(1.0, 'step', 'jump');
+    World.emit('jump', { ent: p, surface: p.groundSurface, volume: 1, fallSpeed: 0 });
 
     // bots always crouch-jump (CCSGameMovement::CheckJumpButton)
     if (p.isBot && !(this.buttons & IN_DUCK)) { p.duckUntilOnGround = true; this.finishDuck(); }
@@ -654,7 +654,7 @@ export class GameMovement {
     p.stamina = Math.min(cv.sv_staminamax, p.stamina + cv.sv_staminalandcost * fv);
     const audible = fv >= cv.sv_land_sound_speed;
     const vol = audible ? Math.max(fvol, 0.5) * (p.ducked ? 0.65 : 1) : 0;
-    if (audible) this._emitStep(vol, 'land');
+    if (audible) this._emitStep(vol, 'step', 'land');
     p.landSpeed = fv;
     p.landSerial++;
     World.emit('land', { ent: p, fallSpeed: fv, surface: p.groundSurface, volume: vol });
@@ -862,12 +862,14 @@ export class GameMovement {
     this._emitStep(vol, ladder ? 'ladder' : 'step');
   }
 
-  _emitStep(volume, kind) {
+  /** footstep payload: CONTRACT §2 {ent, surface, volume, kind} + foot/pos/speed, and a
+   *  `cause` of 'jump' | 'land' for the step sounds Source plays on takeoff and touchdown. */
+  _emitStep(volume, kind, cause = null) {
     const p = this.p;
     if (!World.cvar.sv_footsteps) return;
     p.stepSide ^= 1;
     World.emit('footstep', {
-      ent: p, surface: p.groundSurface || 'default', volume, kind, foot: p.stepSide,
+      ent: p, surface: p.groundSurface || 'default', volume, kind, foot: p.stepSide, cause,
       pos: p.origin, speed: Math.hypot(p.velocity.x, p.velocity.z),
     });
   }

@@ -34,7 +34,7 @@ const THUMB_REST = thumbRest();
 
 const STYLE = {
   CT: { glove: 'glove_ct', palm: 'leather_ct', armor: 'armor_ct', sleeve: 'sleeve_ct', bareTips: 0, skin: 'skin', cuff: 'glove_ct' },
-  T: { glove: 'glove_t', palm: 'glove_t', armor: null, sleeve: 'sleeve_t', bareTips: 2, skin: 'skin', cuff: 'glove_t2' },
+  T: { glove: 'glove_t2', palm: 'glove_t', armor: null, sleeve: 'sleeve_t', bareTips: 2, skin: 'skin', cuff: 'glove_t' },
 };
 
 // Tapered capsule along -Z from 0 (radius r0) to L (radius r1), flattened dorsally.
@@ -176,6 +176,10 @@ function template(team) {
         // fingerless cut edge: rolled leather rim
         sb.add(st.glove, G.torus(r1 * 0.98, 0.05, { rs: 6, ts: 14 }), fingerIdx[i][j], world[fingerIdx[i][j]], { m: M([0, 0, -f.L[j] + 0.05], [0, 0, 0], [1, 0.86, 1]) });
       }
+      if (!bare) for (const sx of [-1, 1]) {
+        sb.add(st.palm === st.glove ? st.glove : st.palm, G.capsule(0.035, f.L[j] * 0.85, { cap: 2, rad: 5 }), fingerIdx[i][j], world[fingerIdx[i][j]],
+          { m: M([sx * r0 * 0.97, -r0 * 0.1, -f.L[j] * 0.5]) });
+      }
       if (st.armor && j === 0) {
         sb.add(st.armor, G.deform(G.box(r0 * 1.45, 0.08, f.L[0] * 0.5, { r: 0.035 }), (v) => { v.y -= 0.55 * v.x * v.x; }, 70),
           fingerIdx[i][j], world[fingerIdx[i][j]], { m: M([0, r0 * 0.84, -f.L[0] * 0.55]) });
@@ -210,14 +214,23 @@ function template(team) {
     const sl = G.lathe([[1.9, 7.0], [2.0, 9], [2.2, 14]], 18, { crease: 80 }); sl.scale(1, 0.86, 1);
     sb.add(st.sleeve, sl, arm, world[arm], { m: toBack });
   } else {
-    const sl = G.lathe([[1.42, 1.6], [1.62, 1.9], [1.7, 2.6], [1.8, 5], [1.95, 8], [2.1, 11], [2.2, 14]], 22, { crease: 80, });
+    // sleeve: bunched compression folds near the cuff, looser further up the arm
+    const prof = [[1.42, 1.55], [1.66, 1.8]];
+    for (let i = 0; i <= 24; i++) { const u = 2.0 + i * 0.5; prof.push([1.72 + 0.045 * (u - 2) - 0.0012 * (u - 2) * (u - 2), u]); }
+    const sl = G.lathe(prof, 28, { crease: 80 });
     sl.scale(1, 0.84, 1);
-    // folds
     sb.add(st.sleeve, G.deform(sl, (v) => {
       const a = Math.atan2(v.y, v.x), u = -v.z;
-      const fold = Math.sin(u * 1.7 + a * 2) * 0.05 + Math.sin(u * 0.9 - a * 3) * 0.04;
+      const near = Math.exp(-Math.max(0, u - 2) * 0.35);
+      const fold = (Math.sin(u * 3.1 + a * 1.5 + Math.sin(a * 3) * 0.8) * 0.06 + Math.sin(u * 1.3 - a * 2.2) * 0.035) * (0.35 + near)
+        + Math.sin(a * 5 + u * 0.4) * 0.012;
       v.x *= 1 + fold; v.y *= 1 + fold;
     }, 80), arm, world[arm], { m: toBack });
+    // cuff band + velcro tab
+    const cb = G.lathe([[1.5, 1.45], [1.66, 1.5], [1.7, 1.65], [1.7, 2.25], [1.64, 2.4]], 28, { crease: 70 });
+    cb.scale(1, 0.85, 1);
+    sb.add(st.sleeve, cb, arm, world[arm], { m: toBack, c: 0xcfcfcf });
+    sb.add(st.sleeve, G.deform(G.box(0.8, 0.12, 0.75, { r: 0.06 }), (v) => { v.y -= 0.25 * v.x * v.x; }, 70), arm, world[arm], { m: M([-0.55, 1.42, 1.9], [0, 0, 25]), c: 0xb8b8b8 });
   }
   // glove cuff around the wrist, with a strap on top
   const cuff = G.lathe([[1.08, -0.4], [1.24, -0.2], [1.3, 0.4], [1.32, cuffLen - 0.2], [1.2, cuffLen]], 20, { crease: 70 });

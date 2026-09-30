@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { PF } from './particles.js';
 import { SPR } from './atlas.js';
-import { randCone, viewmodelToWorldMatched, worldToView, dirWorldToView, sunVisibility } from './util.js';
+import { randCone, fpPoint, dirWorldToView, sunVisibility } from './util.js';
 
 export const MUZZLE = {
   rifle: { scale: 1.0, prongs: 4, prongLen: 2.6, cone: 1.0, glow: 1.0, light: 1.0, smoke: 2, sparks: 3, star: 0 },
@@ -19,7 +19,7 @@ export const MUZZLE = {
 
 export function muzzleClass(key, opts) {
   const k = key || '';
-  const supp = opts?.suppressed ?? (/mp5sd/.test(k) || /(m4a1s|m4a1_silencer|usp)/.test(k) && opts?.suppressed !== false);
+  const supp = opts?.silenced ?? opts?.suppressed ?? (/mp5sd|m4a1s|m4a1_silencer|usp_silencer|usps/.test(k));
   if (supp) return 'suppressed';
   if (/nova|xm1014|mag7|sawed/.test(k)) return 'shotgun';
   if (/awp|ssg08|g3sg1|scar20/.test(k)) return 'sniper';
@@ -41,8 +41,10 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
   const pool = view ? fx.vpool : fx.pool;
   const now = fx.now;
   const P = _P, D = _D;
-  if (view) { worldToView(worldPos, P); dirWorldToView(dir, D).normalize(); }
-  else { P.copy(worldPos); D.copy(dir).normalize(); }
+  // first person: P in viewScene space, _W the screen-matched world point
+  if (opts.viewmodel) fpPoint(worldPos, P, _W); else _W.copy(worldPos);
+  if (view) dirWorldToView(dir, D).normalize();
+  else { P.copy(_W); D.copy(dir).normalize(); }
   const s = M.scale * (opts.scale ?? 1) * (view ? fx.cvar('fx_muzzle_view_scale', 0.75) : 1);
   const bright = fx.cvar('fx_muzzle_bright', 1);
   const S = pool.spec;
@@ -76,7 +78,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
     for (let i = 0; i < M.prongs; i++) {
       S.reset();
       S.pos.copy(P);
-      randCone(D, 0.1 + (cls === 'shotgun' ? 0.1 : 0), R, _t);
+      randCone(D, 0.22 + (cls === 'shotgun' ? 0.12 : 0), R, _t);
       S.vel.copy(_t); // axis
       S.life = life;
       S.size0 = (1.3 + R() * 0.9) * s; S.size1 = S.size0 * 1.2;
@@ -95,7 +97,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
       S.vel.copy(D);
       S.life = life * 0.9;
       S.size0 = 2.4 * s * M.cone; S.size1 = S.size0 * 1.3;
-      S.stretch = 5.5 + R() * 2;
+      S.stretch = 3.2 + R() * 1.4;
       S.c0.set(3.5 * bright, 1.8 * bright, 0.5 * bright, 1); S.c1.set(2.2 * bright, 0.8 * bright, 0.15 * bright, 0);
       S.sprite = SPR.CONE; S.flags = PF.ADD | PF.AXIS;
       S.fadeIn = 0; S.fadeOut = 0.4;
@@ -130,7 +132,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
   }
 
   // smoke wisp: always in world space at the on-screen muzzle position
-  const W = opts.viewmodel ? viewmodelToWorldMatched(worldPos, _W) : _W.copy(worldPos);
+  const W = _W;
   const Wd = _Wd.copy(dir).normalize();
   const S2 = fx.pool.spec;
   const sun = M.smoke > 0 ? sunVisibility(W) : 1;

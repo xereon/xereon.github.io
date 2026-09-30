@@ -164,9 +164,9 @@ const DEFS = {
   armor_ct: () => std(TX.polymerSet({ key: 'act', base: sc(34, 34, 35), rough: 0.5, stip: 0.4, cells: 60 }), { tile: 2, wear: { amt: 0.4, color: srgb(80, 80, 80), rough: 0.4, metal: 0, k0: 9, k1: 20 } }),
   sleeve_ct: () => std(TX.fabricSet({ key: 'sct', base: sc(50, 55, 62), rough: 0.9, freq: 120 }), { tile: 4, ns: 0.3, wear: false }),
   glove_t: () => std(TX.leatherSet({ key: 'gt', base: sc(96, 72, 50), rough: 0.6, cells: 90 }), { tile: 2, ns: 0.5, wear: false }),
-  glove_t2: () => std(TX.fabricSet({ key: 'gt2', base: sc(74, 64, 50), rough: 0.85, freq: 96 }), { tile: 2, ns: 0.35, wear: false }),
+  glove_t2: () => std(TX.fabricSet({ key: 'gt2', base: sc(86, 72, 52), rough: 0.85, freq: 96 }), { tile: 2, ns: 0.4, wear: false }),
   sleeve_t: () => std(TX.fabricSet({ key: 'st', base: sc(98, 86, 64), rough: 0.9, freq: 110 }), { tile: 4, ns: 0.35, wear: false }),
-  skin: () => std(TX.skinSet({ key: 'skin', base: sc(170, 116, 84), rough: 0.55 }),
+  skin: () => std(TX.skinSet({ key: 'skin', base: sc(160, 110, 82), rough: 0.56 }),
     { physical: true, sheen: 0.25, sheenRoughness: 0.6, sheenColor: [0.5, 0.2, 0.12], tile: 3, ns: 0.5, wear: false }),
   nail: () => std(TX.skinSet({ key: 'nail', base: sc(210, 170, 150), rough: 0.3 }), { tile: 1, wear: false }),
 };

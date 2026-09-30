@@ -37,6 +37,8 @@ export function decorate(K, walls) {
       if (Math.abs(w.zfB - w.zfA) / L < 0.08) {
         const [px, py] = at(d);
         K.prop('doubleDoor', [wd, hd, 0, { depth: 12, paint: DOORPAINT[seed % DOORPAINT.length], seed: seed % 7 }], [px, py, z], yaw);
+        // worn stone doorstep
+        K.slab(at(d - wd / 2 - 6, 9), at(d + wd / 2 + 6, 9), z - 2, z + 5, 18, 'stone_block', { col: false, color: 0.9 });
         take(d, wd / 2 + 24);
         nDoor++;
         if (r() < 0.45) { const [ax, ay] = at(d); K.prop('awning', [wd + 40, 36, { color: r() < 0.5 ? 'teal' : 'stripe' }], [ax, ay, z + hd + 16], yaw); }
@@ -46,17 +48,27 @@ export function decorate(K, walls) {
     const storeys = [];
     if (H > 200) storeys.push(150);
     if (H > 320) storeys.push(270);
+    if (H > 440) storeys.push(390);
+    const arched = w.R.o.windows === 'arched';
     for (const zr of storeys) {
-      const n = Math.floor((L - 80) / 150);
+      const n = Math.floor((L - 80) / (arched ? 105 : 150));
       for (let k = 0; k < n; k++) {
-        if (r() > 0.62) continue;
+        if (r() > (arched ? 0.95 : 0.62)) continue;
         const d = 60 + (k + 0.5) * ((L - 120) / n);
         if (!free(d, 30)) continue;
         const ww = 34 + Math.round(r() * 3) * 4, wh = 52 + Math.round(r() * 3) * 4;
         const z = zf + zr;
         if (z + wh > w.top - 24) continue;
-        window_(K, w, at(d), ux, uy, mx, my, z, ww, wh, yaw, r() < 0.7 ? style : null, r);
+        window_(K, w, at(d), ux, uy, mx, my, z, ww, wh, yaw, r() < 0.7 ? style : null, r, false, w.R.o.windows === 'arched');
         nWin++;
+        if (zr > 200 || r() > 0.82) continue;
+        // small balcony: stone slab on two corbels with an iron railing
+        const bw = ww + 28, bd = 22;
+        const a = at(d - bw / 2, 0), b = at(d + bw / 2, 0);
+        K.slab(a, b, z - 12, z - 5, bd * 2, 'stone_block', { col: false, color: 0.92 });
+        for (const f of [-0.35, 0.35]) K.slab(at(d + bw * f - 3, 0), at(d + bw * f + 3, 0), z - 26, z - 12, bd * 1.6, 'stone_block', { col: false, color: 0.85 });
+        K.slab(at(d - bw / 2, bd - 1), at(d + bw / 2, bd - 1), z - 5, z + 26, 1.5, 'metal_grate', { col: false });
+        for (const e of [-1, 1]) K.slab(at(d + e * bw / 2, 0.5), at(d + e * bw / 2, bd), z - 5, z + 26, 1.5, 'metal_grate', { col: false });
       }
     }
     // ---- ground-floor barred window, lamp, meter box, AC
@@ -70,7 +82,11 @@ export function decorate(K, walls) {
     }
     if (L > 120 && r() < 0.18) {
       const d = 40 + r() * (L - 80);
-      if (free(d, 14)) { const [px, py] = at(d); K.prop(r() < 0.5 ? 'meterBox' : 'electricBox', [], [px, py, floorAt(d) + (r() < 0.5 ? 40 : 56)], yaw); take(d, 14); }
+      if (free(d, 14)) {
+        const [px, py] = at(d); const box = r() < 0.5 ? 'meterBox' : 'electricBox';
+        K.prop(box, [], [px, py, floorAt(d) + (r() < 0.5 ? 40 : 56)], yaw); take(d, 14);
+        if (box === 'electricBox') K.emitter('amb_powerbox', [px, py, floorAt(d) + 70], 500);
+      }
     }
     if (L > 160 && H > 230 && r() < 0.16) {
       const d = 50 + r() * (L - 100);
@@ -132,9 +148,26 @@ export function decorate(K, walls) {
 }
 
 /** Recessed dark window with a timber frame, stone sill and (optionally) shutters or bars. */
-function window_(K, w, [px, py], ux, uy, mx, my, z, ww, wh, yaw, shutters, r, bars = false) {
+function window_(K, w, [px, py], ux, uy, mx, my, z, ww, wh, yaw, shutters, r, bars = false, arched = false) {
   const hw = ww / 2, o = 0.6;
   const P = (s, zz, off) => [px + ux * s + mx * off, py + uy * s + my * off, zz];
+  if (arched) {
+    // tall arched opening with a stone surround (Moorish hotel / CT buildings)
+    const pane = [P(-hw, z, o), P(hw, z, o)];
+    for (let i = 0; i <= 10; i++) { const a = Math.PI * i / 10; pane.push(P(hw * Math.cos(a), z + wh + hw * Math.sin(a), o)); }
+    K.poly('window_frame', faceToward(pane, mx, my), { col: 0.1 });
+    for (let i = 0; i < 10; i++) {
+      const a0 = Math.PI * i / 10, a1 = Math.PI * (i + 1) / 10, R0 = hw + 1, R1 = hw + 7;
+      const q = [P(R0 * Math.cos(a0), z + wh + R0 * Math.sin(a0), 1.5), P(R1 * Math.cos(a0), z + wh + R1 * Math.sin(a0), 1.5),
+        P(R1 * Math.cos(a1), z + wh + R1 * Math.sin(a1), 1.5), P(R0 * Math.cos(a1), z + wh + R0 * Math.sin(a1), 1.5)];
+      K.poly('arch_stone', faceToward(q, mx, my), { col: 0.95 });
+    }
+    for (const sgn of [-1, 1]) K.slab(P(sgn * (hw + 1), 0, 1.2).slice(0, 2), P(sgn * (hw + 7), 0, 1.2).slice(0, 2), z, z + wh, 2.4, 'arch_stone', { col: false });
+    const sa = P(-hw - 8, 0, 4), sb = P(hw + 8, 0, 4);
+    K.slab([sa[0], sa[1]], [sb[0], sb[1]], z - 6, z, 8, 'stone_block', { col: false, color: 0.95 });
+    if (shutters) K.prop('windowGrate', [ww, wh], P(0, z, 0.8), yaw);
+    return;
+  }
   // dark pane just proud of the wall, facing the street
   const pane = [P(-hw, z, o), P(hw, z, o), P(hw, z + wh, o), P(-hw, z + wh, o)];
   K.poly('window_frame', faceToward(pane, mx, my), { col: 0.1 });

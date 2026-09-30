@@ -249,7 +249,10 @@ export class Bot {
     this.aimMode = 'look';
     this.inFire = this.fireAt(ent.origin, 20);
     const throwing = this.nade && this.runNade(now);
-    if (!throwing) this.combat(dt, now);
+    // mid-plant / mid-defuse: only a close threat (or one hurting us) is worth stopping for
+    this.focus = this.objectiveFocus(now);
+    const running = this.task === 'flee' && this.mgr.bomb.timeLeft(now) < 5;
+    if (!throwing && !this.focus && !running) this.combat(dt, now);
     if (!this.moveOverride) this.followPath(dt, now);
     if (this.inFire && this.task !== 'defuse' && this.task !== 'plant') {
       // burning: get out the shortest way
@@ -985,9 +988,21 @@ export class Bot {
 
   // ---- objectives ------------------------------------------------------------------------
 
+  objectiveFocus(now) {
+    const t = this.task;
+    if (!this.arrived || (t !== 'plant' && t !== 'defuse')) return false;
+    if (t === 'plant' && !WI.hasC4(this.ent)) return false;
+    if (t === 'defuse' && !this.mgr.bomb.planted) return false;
+    const m = this.targetMem;
+    if (!this.target || !m?.visible) return true;
+    // stick the defuse when it's now or never
+    if (t === 'defuse' && this.mgr.bomb.timeLeft(now) < (this.ent.defuser ? 5.5 : 10.5)) return true;
+    return m.pos.distanceTo(this.ent.origin) > 900 && now - this.lastHurt > 2;
+  }
+
   objectiveButtons(now) {
     const cmd = this.cmd, match = World.match;
-    if (this.task === 'plant' && this.arrived && !this.target && WI.hasC4(this.ent)) {
+    if (this.task === 'plant' && this.focus) {
       WI.switchTo(this.ent, 'c4');
       // rules.js plants for a carrier holding USE on a site (CS bots hold attack with C4 out)
       cmd.buttons |= IN_USE;
@@ -996,9 +1011,7 @@ export class Bot {
       this.moveSpeed = 0; cmd.forwardmove = 0; cmd.sidemove = 0;
       this.wantPitch = 55;
       this.mgr.planting(this, now);
-    } else if (this.task === 'defuse' && this.arrived && this.mgr.bomb.planted) {
-      // stop defusing to fight unless it's now-or-never
-      if (this.target && this.mgr.bomb.timeLeft(now) > (this.ent.defuser ? 6 : 11)) { this.defuseStart = -1; return; }
+    } else if (this.task === 'defuse' && this.focus) {
       cmd.buttons |= IN_USE;
       match?.use?.(this.ent, true);
       if (this.defuseStart < 0) this.defuseStart = now;

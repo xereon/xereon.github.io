@@ -103,6 +103,7 @@ export class Kit {
     this.stats = { brushes: 0, regions: 0, props: 0, propFallbacks: 0 };
     this.decorators = [];
     this.roofDecorators = [];
+    this.emitters = [];          // looping ambience sources (Source coords)
   }
 
   // ---------------------------------------------------------------------------- materials
@@ -1000,8 +1001,8 @@ export class Kit {
         hh++;
       }
       for (let jj = j; jj < j + hh; jj++) for (let ii = i; ii < i + w; ii++) done[jj * nx + ii] = 1;
-      const ax = x0 + i * G, ay = y0 + j * G, bx = ax + w * G, by = ay + hh * G;
-      this.poly(mat, [[ax, ay, z], [bx, ay, z], [bx, by, z], [ax, by, z]], { col: (p) => rc(p[0], p[1]), uv: (p) => [p[0] / S, p[1] / S] });
+      const ax = x0 + i * G, ay = y0 + j * G, bx = ax + w * G, by = ay + hh * G, zr = z - 0.6;   // just under the copings
+      this.poly(mat, [[ax, ay, zr], [bx, ay, zr], [bx, by, zr], [ax, by, zr]], { col: (p) => rc(p[0], p[1]), uv: (p) => [p[0] / S, p[1] / S] });
     }
     // 4. vertical steps between roof cells of different height (face the lower side)
     const face = (xa, ya, xb, yb, zl, zh, nxv, nyv) => {
@@ -1017,14 +1018,14 @@ export class Kit {
         const d = c + 1;
         if (!open[d] && !Number.isNaN(h[d]) && h[d] !== h[c]) {
           const x = x0 + (i + 1) * G, ya = y0 + j * G, yb = ya + G;
-          if (h[d] > h[c]) face(x, ya, x, yb, h[c], h[d], -1, 0); else face(x, ya, x, yb, h[d], h[c], 1, 0);
+          if (h[d] > h[c]) face(x, ya, x, yb, h[c] - 0.6, h[d] - 0.6, -1, 0); else face(x, ya, x, yb, h[d] - 0.6, h[c] - 0.6, 1, 0);
         }
       }
       if (j + 1 < ny) {
         const d = c + nx;
         if (!open[d] && !Number.isNaN(h[d]) && h[d] !== h[c]) {
           const y = y0 + (j + 1) * G, xa = x0 + i * G, xb = xa + G;
-          if (h[d] > h[c]) face(xa, y, xb, y, h[c], h[d], 0, -1); else face(xa, y, xb, y, h[d], h[c], 0, 1);
+          if (h[d] > h[c]) face(xa, y, xb, y, h[c] - 0.6, h[d] - 0.6, 0, -1); else face(xa, y, xb, y, h[d] - 0.6, h[c] - 0.6, 0, 1);
         }
       }
     }
@@ -1067,6 +1068,12 @@ export class Kit {
     } else if (c.prism) {
       this.colPrism(c.prism.map((p) => L2S(p.x, p.z ?? p.y)), pos[2] + c.y0, pos[2] + c.y1, s, flags);
     }
+  }
+
+  /** Register a looping ambience emitter for the audio module (World.map.soundEmitters). */
+  emitter(type, pos, radius = 600) {
+    if (this.emitters.some((e) => e.type === type && Math.hypot(e.pos[0] - pos[0], e.pos[1] - pos[1]) < 250)) return;
+    this.emitters.push({ type, pos, radius });
   }
 
   // ---------------------------------------------------------------------------- output

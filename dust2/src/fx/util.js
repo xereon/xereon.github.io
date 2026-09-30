@@ -84,3 +84,49 @@ export function queueRange(buf, start, count) {
   else if (!(r.length === 1 && r[0].start === 0 && r[0].count === buf.array.length)) buf.addUpdateRange(start, count);
   buf.needsUpdate = true;
 }
+
+const _vp = new THREE.Vector3(), _wp = new THREE.Vector3(), _m = new THREE.Matrix4();
+/** Is p closer to the viewmodel camera than to the world camera (i.e. a viewScene point)? */
+export function isViewSpace(p) {
+  const cam = World.camera, vc = World.viewCamera;
+  if (!cam || !vc) return false;
+  _vp.setFromMatrixPosition(vc.matrixWorld); _wp.setFromMatrixPosition(cam.matrixWorld);
+  return p.distanceToSquared(_vp) <= p.distanceToSquared(_wp);
+}
+/** viewScene point -> world point on the same pixel at the same view depth (Viewmodel._toWorld). */
+export function viewToWorldMatched(p, out) {
+  const cam = World.camera, vc = World.viewCamera;
+  if (!cam || !vc) return out.copy(p);
+  _m.copy(vc.matrixWorld).invert();
+  _l.copy(p).applyMatrix4(_m);
+  const z = _l.z;
+  if (z > -0.5) return out.copy(_l).applyMatrix4(cam.matrixWorld);
+  const pv = vc.projectionMatrix.elements, pw = cam.projectionMatrix.elements;
+  const ndcX = (pv[0] * _l.x + pv[8] * z) / -z, ndcY = (pv[5] * _l.y + pv[9] * z) / -z;
+  _l.x = (ndcX * -z - pw[8] * z) / pw[0];
+  _l.y = (ndcY * -z - pw[9] * z) / pw[5];
+  return out.copy(_l).applyMatrix4(cam.matrixWorld);
+}
+/** Inverse of viewToWorldMatched. */
+export function worldMatchedToView(p, out) {
+  const cam = World.camera, vc = World.viewCamera;
+  if (!cam || !vc) return out.copy(p);
+  _m.copy(cam.matrixWorld).invert();
+  _l.copy(p).applyMatrix4(_m);
+  const z = _l.z;
+  if (z < -0.5) {
+    const pv = vc.projectionMatrix.elements, pw = cam.projectionMatrix.elements;
+    const ndcX = (pw[0] * _l.x + pw[8] * z) / -z, ndcY = (pw[5] * _l.y + pw[9] * z) / -z;
+    _l.x = (ndcX * -z - pv[8] * z) / pv[0];
+    _l.y = (ndcY * -z - pv[9] * z) / pv[5];
+  }
+  return out.copy(_l).applyMatrix4(vc.matrixWorld);
+}
+/**
+ * Normalise a first-person point to { view (viewScene), world (screen-matched world) }.
+ * Accepts either a viewScene point (weapons' muzzleView) or a screen-matched world point.
+ */
+export function fpPoint(p, outView, outWorld) {
+  if (isViewSpace(p)) { outView.copy(p); viewToWorldMatched(p, outWorld); }
+  else { outWorld.copy(p); worldMatchedToView(p, outView); }
+}

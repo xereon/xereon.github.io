@@ -35,6 +35,8 @@ export function build(K) {
   ], 4), {
     mat: 'sand_floor', ...stoneWall, top: 330, tops: { 25: 64, 26: 64, 28: 64 }, cornice: { mat: 'stone_block', h: 10, out: 5 }, merlons: true,
   });
+  // close the skyline above the north end of the low plat/site divider
+  K.slab([-1736, 2896], [-1714, 2896], 60, 330, 12, 'stone_wall', { side: 'left', color: 0.95 });
   K.stairs('b_platst', [[-1980, 2442], [-1860, 2442], [-1860, 2500], [-1980, 2500]], 4, 32, 4,
     { mat: 'stone_block', tops: { e: 64, w: 64 } });
   K.region('b_plat', zc([

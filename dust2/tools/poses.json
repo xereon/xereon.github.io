@@ -27,13 +27,13 @@
   ],
   "pitch": 1,
   "yaw": 62,
-  "desc": "Outside long looking north up the street to the long doors"
+  "desc": "Outside long looking north-east up the street to the long doors"
  },
  "long_doors": {
   "eye": [
    636,
    64,
-   -120
+   -130
   ],
   "pitch": 0,
   "yaw": 90,
@@ -47,7 +47,7 @@
   ],
   "pitch": 0,
   "yaw": 90,
-  "desc": "Exit of long doors / long corner looking north up Long A toward A"
+  "desc": "Long corner looking north up Long A toward the ramp and A"
  },
  "pit": {
   "eye": [
@@ -92,7 +92,7 @@
  "catwalk": {
   "eye": [
    -430,
-   -61,
+   -41,
    -1180
   ],
   "pitch": -6,
@@ -172,7 +172,7 @@
  "b_doors": {
   "eye": [
    -1000,
-   24,
+   21,
    -2300
   ],
   "pitch": 2,

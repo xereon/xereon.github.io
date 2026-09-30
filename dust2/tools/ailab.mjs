@@ -39,7 +39,7 @@ for (let waited = 0; !myLock; waited++) {
     try { fs.writeFileSync(f, String(process.pid), { flag: 'wx' }); myLock = f; }
     catch { const pid = +fs.readFileSync(f, 'utf8').trim(); if (!pid || !alive(pid)) { try { fs.unlinkSync(f); } catch {} } }
   }
-  if (!myLock) { if (waited === 0) console.error('[ailab] waiting for a free render slot…'); await new Promise((r) => setTimeout(r, 1000)); }
+  if (!myLock) { if (waited === 0) console.error('[ailab] waiting for a free render slot…'); await new Promise((r) => setTimeout(r, 250)); }
 }
 const releaseLock = () => { try { if (myLock && fs.readFileSync(myLock, 'utf8').trim() === String(process.pid)) fs.unlinkSync(myLock); } catch {} };
 process.on('exit', releaseLock);

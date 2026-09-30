@@ -60,22 +60,24 @@ vec4 genSmoke(vec2 p, float t, float fi) {
   return vec4(d, h, clamp(0.2 + lumps * 0.95, 0.0, 1.0), 1.0);
 }
 
+// A flame lick's life: a tall tongue grows from the base, flickers, detaches and shrinks.
 vec4 genFire(vec2 p, float t, float fi) {
-  float rise = t * 1.3;
-  vec2 q = p;
-  float n = fbm(vec3(q.x * 2.0, q.y * 1.4 - rise * 2.2, fi * 0.21), 5);
-  float n2 = fbm(vec3(q.x * 4.6, q.y * 3.1 - rise * 3.8, fi * 0.33 + 5.0), 3);
-  float cy = mix(-0.45, 0.2, t);
-  float sx = mix(1.35, 2.1, t), sy = mix(1.5, 0.95, t);
-  vec2 d = vec2((q.x + n * 0.28) * sx, (q.y - cy) * sy);
-  // teardrop: narrower toward the top
-  d.x *= 1.0 + max(0.0, q.y - cy) * 0.9;
-  float body = 1.0 - length(d);
-  float temp = body * 1.35 + n * 0.75 + n2 * 0.3 - t * 0.55;
-  temp *= 1.0 - smoothstep(0.8, 0.98, max(abs(p.x), abs(p.y)));
-  temp = clamp(temp, 0.0, 1.0);
-  float a = smoothstep(0.03, 0.3, temp);
-  return vec4(a, temp, temp, 1.0);
+  float yb = mix(-0.94, -0.45, smoothstep(0.5, 1.0, t));
+  float len = mix(1.0, 1.7, smoothstep(0.0, 0.4, t)) * mix(1.0, 0.5, smoothstep(0.55, 1.0, t));
+  float yy = (p.y - yb) / len;
+  float n = fbm(vec3(p.x * 2.4, p.y * 1.6 - t * 3.0, fi * 0.13), 4);
+  float n2 = fbm(vec3(p.x * 6.0, p.y * 3.5 - t * 5.0, fi * 0.29 + 7.0), 3);
+  float w = 0.36 * pow(max(0.0, 1.0 - yy), 0.7) * (0.85 + 0.35 * n) + 0.015;
+  float x = p.x + n * 0.26 * yy + n2 * 0.05 * yy;
+  float d = abs(x) / w;
+  float tip = 1.0 - smoothstep(0.8, 1.05, yy + n2 * 0.18);
+  float body = (1.0 - smoothstep(0.3, 1.0, d)) * smoothstep(-0.1, 0.05, yy) * tip;
+  float T = body * (1.0 - 0.72 * clamp(yy, 0.0, 1.0)) * (0.78 + 0.4 * n) * (1.0 - 0.3 * t);
+  T += (1.0 - smoothstep(0.0, 0.55, d)) * (1.0 - smoothstep(0.0, 0.4, yy)) * smoothstep(-0.1, 0.02, yy) * 0.28;
+  T *= 1.0 - smoothstep(0.85, 0.99, max(abs(p.x), abs(p.y)));
+  T = clamp(T, 0.0, 1.0);
+  float a = smoothstep(0.02, 0.18, T);
+  return vec4(a, T, T, 1.0);
 }
 
 // Tapered prong from origin along dir, returns intensity.

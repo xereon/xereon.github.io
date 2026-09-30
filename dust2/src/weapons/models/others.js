@@ -195,7 +195,7 @@ export function buildShotgun(b, key) {
     const t = Math.tan(12 * Math.PI / 180);
     straightMag(b, 1.55 - 0.5 * t, 2.55 - 0.5 * t, -1.2, 4.2, 1.1, 'park', -4.2 * t, false);
     b.anchor('muzzle', [0, 0, -16.15]); b.anchor('eject', [0.75, 0.2, -4]); b.anchor('pivot', [0, -1.2, -4]);
-    return { ...H(RH(1.9, -2.0, 14), LHg(10.0, -2.35, -0.6), { magGrab: MAGG(2.1, -5.5) }), magFed: true, magPivot: 'straight', pumpTravel: 3.0, boltTravel: 0 };
+    return { ...H(RH(1.9, -2.0, 14), LHg(10.0, -2.35, -0.6), { magGrab: MAGG(2.1, -5.5) }), magFed: true, magPivot: 'straight', pumpTravel: 3.0, pumpAction: true, boltTravel: 0 };
   }
   // tube-magazine shotguns
   const recMat = nova ? 'polymer' : 'alu';
@@ -228,7 +228,7 @@ export function buildShotgun(b, key) {
   b.add('steel', cyl(0.12, 0.12, 0.6, 10, { axis: 'x' }), { p: [0.95, 0.2, -3.8] });
   b.part('body');
   b.anchor('muzzle', [0, 0, -26.2]); b.anchor('eject', [0.75, 0.2, -5]); b.anchor('pivot', [0, -1.5, -5]);
-  return { ...H(RH(nova ? 0.2 : 1.6, nova ? -2.6 : -2.2, nova ? 25 : 16), LHg(12.5, -2.55, -0.65)), shells: 4, loadPort: [0.1, -2.1, -5.4], pumpTravel: 3.2, boltTravel: 2.8, magPivot: 'straight' };
+  return { ...H(RH(nova ? 0.2 : 1.6, nova ? -2.6 : -2.2, nova ? 25 : 16), LHg(12.5, -2.55, -0.65)), shells: 4, loadPort: [0.1, -2.1, -5.4], pumpTravel: 3.2, pumpAction: nova, boltTravel: 2.8, magPivot: 'straight' };
 }
 
 // ======================= LMGs =======================

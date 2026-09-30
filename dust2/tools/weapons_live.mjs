@@ -91,7 +91,7 @@ try {
       state() { const L = Wd.local, a = L.active; return { key: a?.key, clip: a?.clip, st: a?.state, punch: [+L.aimPunch.pitch.toFixed(2), +L.aimPunch.yaw.toFixed(2)], fov: Wd.camera.fov.toFixed(1), scoped: !!L.scoped, inacc: +Wd.weapons.currentInaccuracy(L).toFixed(3) }; },
     };
   }, POSE);
-  const shot = async (name) => { const f = path.join(OUT, `${name}.png`); await page.locator('canvas#game').screenshot({ path: f }); log('wrote', f); };
+  const shot = async (name) => { const f = path.join(OUT, `${name}.png`); await page.screenshot({ path: f, timeout: 180000, animations: 'allow' }); log('wrote', f); };
   const want = (n) => !ONLY || ONLY.includes(n);
 
   if (want('spray')) {

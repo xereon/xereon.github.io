@@ -95,6 +95,13 @@ export class SmokeVolume {
   }
 
   get alive() { return this.active; }
+  /** Gameplay ended the smoke early: start dissipating now. */
+  stop() {
+    if (!this.active) return;
+    const now = this.sys.now;
+    if (now < this.t0 + SMOKE.HOLD) this.t0 = now - SMOKE.HOLD;
+    if (this.done) this.relight();
+  }
   get endTime() { return this.t0 + SMOKE.LIFE; }
 
   start(pos, now, rand) {

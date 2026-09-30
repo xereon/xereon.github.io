@@ -140,7 +140,7 @@ void main() {
   // wrapped diffuse, darker core where the puff is thick; self-shadow from the volume march
   float diff = max(0.0, (ndl + 0.3) / 1.3);
   float thick = mix(1.0, 0.65, t.r);
-  float fwd = pow(max(0.0, dot(-V, uSunDirV)), 5.0) * (1.0 - t.r) * 1.2;
+  float fwd = pow(max(0.0, dot(-V, uSunDirV)), 4.0) * (1.0 - t.r * 0.8) * 1.8;
   vec3 nW = (vec4(nv, 0.0) * viewMatrix).xyz;
   vec3 amb = mix(uGroundCol, uSkyCol, clamp(nW.y * 0.5 + 0.6, 0.0, 1.0)) * vLight.y;
   float cav = mix(0.7, 1.0, t.a);

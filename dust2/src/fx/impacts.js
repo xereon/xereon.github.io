@@ -91,9 +91,9 @@ export function sparks(fx, P, N, count, speed, floorY, { life = 0.45, size = 0.2
     S.gravity = 1; S.drag = 1.2;
     S.flags = PF.ADD | PF.STRETCH | PF.BOUNCE | PF.MINPX;
     S.floorY = floorY; S.restitution = 0.45;
-    S.stretch = 0.018 + R() * 0.012;
+    S.stretch = 0.007 + R() * 0.009;
     S.life = life * (0.4 + R() * 0.9);
-    S.size0 = size * (0.8 + R() * 0.5); S.size1 = S.size0 * 0.6;
+    S.size0 = size * (0.8 + R() * 0.6); S.size1 = S.size0 * 0.5;
     S.c0.set(9 * hot, 6 * hot, 2.8 * hot, 1);
     S.c1.set(3.5 * hot, 0.9 * hot, 0.12 * hot, 0.8);
     S.sprite = SPR.SPARK;
@@ -150,8 +150,8 @@ export function impactFx(fx, point, normal, surface) {
     }
     chips(fx, P, N, _c, Math.round(4 * k), floorY, sun, SPR.CHIP0 + 3, 1, 0.15, 0.3, 260);
   } else if (METAL[surface]) {
-    sparks(fx, P, N, Math.round((16 + R() * 10) * k), 650, floorY, { size: 0.4 });
-    glint(fx, P, N, 3.5 + R() * 1.5, 7, 5, 2.4, 0.05);
+    sparks(fx, P, N, Math.round((16 + R() * 10) * k), 650, floorY, { size: 0.55 });
+    glint(fx, P, N, 5 + R() * 2, 6, 4.2, 1.8, 0.06);
     dustPuffs(fx, P, N, _c.setRGB(0.35, 0.35, 0.35), Math.round(2 * k), 0.5, floorY, sun);
   } else if (WOOD[surface]) {
     dustPuffs(fx, P, N, _c, Math.round((1 + 2 * amt) * k), 0.7, floorY, sun);
@@ -254,12 +254,12 @@ export function bloodFx(fx, point, dir, amount = 1) {
   // wall splat behind the victim
   if (traceWorld(point, D, 120, _p, _n) < 1) {
     const dist = _p.distanceTo(point);
-    fx.decals.add(_p, _n, 'blood', (18 + R() * 14) * (0.6 + dist / 160) * (0.7 + 0.3 * amount), R() * 6.283, 'flesh', 0.92, (R() * 2) | 0);
+    fx.decals.add(_p, _n, 'blood', (34 + R() * 22) * (0.6 + dist / 160) * (0.7 + 0.3 * amount), R() * 6.283, 'flesh', 0.92, (R() * 2) | 0);
   }
   // drips on the floor
   if (floorY > -1e5 && point.y - floorY < 90 && R() < 0.7) {
     _p.set(point.x + D.x * 12 * R(), floorY, point.z + D.z * 12 * R());
-    fx.decals.add(_p, _up, 'blood_drip', 12 + R() * 10, R() * 6.283, 'flesh', 0.9, 0);
+    fx.decals.add(_p, _up, 'blood_drip', 18 + R() * 12, R() * 6.283, 'flesh', 0.9, 0);
   }
 }
 

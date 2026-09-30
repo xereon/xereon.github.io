@@ -342,6 +342,9 @@ export class BotManager {
   _wire() {
     World.on('round_start', () => this.onRoundStart());
     World.on('round_end', () => { this.roundOver = true; });
+    const live = () => { this.liveAt = World.time; };
+    World.on('freeze_end', live);
+    World.on('round_live', live);
     World.on('bomb_planted', (e) => {
       const b = this.bomb;
       b.planted = true; b.dropped = false; b.plantTime = World.time; b.site = e?.site || null;

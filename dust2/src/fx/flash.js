@@ -93,7 +93,7 @@ export class Flash {
     // visuals
     S.reset(); S.pos.copy(pos);
     S.life = 0.2; S.size0 = 40; S.size1 = 75;
-    S.c0.set(10, 10, 11, 1); S.c1.set(3, 3, 3.5, 0);
+    S.c0.set(6, 6, 6.6, 1); S.c1.set(2, 2, 2.3, 0);
     S.sprite = SPR.GLOW; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.15;
     fx.pool.emit(S, now);
     S.reset(); S.pos.copy(pos);
@@ -112,7 +112,7 @@ export class Flash {
       fx.pool.emit(S, now);
     }
     _to.copy(pos);
-    fx.lights.spawn(now, _to, 0xeef2ff, 6e5, 1800, 0.3, { prio: 3, hold: 0.04 });
+    fx.lights.spawn(now, _to, 0xeef2ff, 3e5, 1500, 0.28, { prio: 3, hold: 0.03 });
   }
 
   amountAt(st, now) {

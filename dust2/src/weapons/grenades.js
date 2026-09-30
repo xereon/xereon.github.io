@@ -115,7 +115,11 @@ export class GrenadeSystem {
     this._tickDecoys(dt);
     for (let i = this.smokes.length - 1; i >= 0; i--) {
       const sm = this.smokes[i];
-      if (this.time - sm.t0 > sm.duration) { World.emit('smoke_expire', { pos: sm.pos.clone(), id: sm.id }); this.smokes.splice(i, 1); }
+      if (this.time - sm.t0 > sm.duration) {
+        World.emit('smoke_expire', { pos: sm.pos.clone(), id: sm.id });
+        World.emit('grenade_expire', { pos: sm.pos.clone(), key: 'smokegrenade', ent: sm.owner, id: sm.id });
+        this.smokes.splice(i, 1);
+      }
     }
   }
 
@@ -160,7 +164,7 @@ export class GrenadeSystem {
     g.spin.multiplyScalar(0.6);
     if (speedIn > 60 && this.time - g.lastBounceT > 0.08) {
       g.lastBounceT = this.time;
-      World.emit('grenade_bounce', { weapon: g.key, pos: g.pos.clone(), surface: surface || 'default', speed: speedIn, ent: g.owner });
+      World.emit('grenade_bounce', { key: g.key, weapon: g.key, pos: g.pos.clone(), surface: surface || 'default', speed: speedIn, ent: g.owner });
     }
   }
 
@@ -210,7 +214,7 @@ export class GrenadeSystem {
     g.done = true;
     const pos = g.pos, key = g.key, fx = World.fx;
     if (World.cvar.sv_grenade_trajectory) console.log(`[grenade] ${key} detonated at`, pos.toArray().map((v) => v.toFixed(1)).join(' '), `after ${g.age.toFixed(2)}s`);
-    const ev = { weapon: key, pos: pos.clone(), ent: g.owner, air, id: `${key}_${++this.serial}`, duration: g.def.duration };
+    const ev = { key, weapon: key, pos: pos.clone(), ent: g.owner, air, id: `${key}_${++this.serial}`, duration: g.def.duration };
     World.emit('grenade_detonate', ev);
     if (key !== 'molotov' && key !== 'incgrenade' && key !== 'decoy') World.emit(`${key}_detonate`, ev);
     try {
@@ -297,6 +301,7 @@ export class GrenadeSystem {
       if (f.pos.distanceTo(pos) > r + f.radius * 0.5) continue;
       try { f.handle?.extinguish?.(); f.handle?.stop?.(); } catch (err) { console.error(err); }
       World.emit('inferno_expire', { pos: f.pos.clone(), weapon: f.key, id: f.id, extinguished: true });
+      World.emit('grenade_expire', { pos: f.pos.clone(), key: f.key, ent: f.owner, id: f.id });
       this.fires.splice(i, 1);
     }
   }
@@ -310,6 +315,7 @@ export class GrenadeSystem {
       if (this.time - f.t0 > f.duration) {
         try { f.handle?.stop?.(); } catch (err) { console.error(err); }
         World.emit('inferno_expire', { pos: f.pos.clone(), weapon: f.key, id: f.id });
+        World.emit('grenade_expire', { pos: f.pos.clone(), key: f.key, ent: f.owner, id: f.id });
         this.fires.splice(i, 1); continue;
       }
       if (this.time < f.nextHurt) continue;
@@ -336,7 +342,7 @@ export class GrenadeSystem {
       const age = this.time - d.t0;
       if (age > (WEAPONS.decoy.duration ?? 15)) {
         World.fx?.explosion?.(d.pos.clone(), { scale: 0.25 });
-        World.emit('grenade_detonate', { weapon: 'decoy', pos: d.pos.clone(), ent: d.owner, final: true });
+        World.emit('grenade_expire', { key: 'decoy', weapon: 'decoy', pos: d.pos.clone(), ent: d.owner });
         World.emit('sound', { name: 'decoy_pop', pos: d.pos.clone() });
         if (d.mesh) { d.mesh.parent?.remove(d.mesh); }
         this.decoys.splice(i, 1);

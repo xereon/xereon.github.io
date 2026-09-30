@@ -110,6 +110,8 @@ export async function buildDust2(opts = {}) {
     fog: { color: new THREE.Color(0xdcd0b8), density: 0.00004 },
     walkable: out.walkable,
     callouts,
+    // looping ambience for the audio module (CONTRACT §2 World.map.soundEmitters)
+    soundEmitters: K.emitters.map((e) => ({ name: e.type, type: e.type, pos: S(e.pos[0], e.pos[1], e.pos[2]), radius: e.radius })),
     // extras (debug / tooling)
     source: true,
     regions: K.regions.map((R) => ({ id: R.id, poly: R.pts.map((p) => [p.x, p.y, p.z]), ceil: R.ceil })),

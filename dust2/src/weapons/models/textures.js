@@ -290,12 +290,14 @@ export function skinSet({ key = 'skin', base = [0.62, 0.43, 0.33], rough = 0.55,
     const blot = fbm(u, v, 4, 4, 4, 93);
     const vein = sstep(0.48, 0.52, fbm(u, v, 3, 7, 3, 97));
     const cre = sstep(0.7, 0.9, fbm(u, v, 40, 6, 2, 99));
-    o.r = base[0] * (0.94 + blot * 0.12) - pore * 0.03;
-    o.g = base[1] * (0.95 + (1 - blot) * 0.08) - pore * 0.03 - vein * 0.01;
-    o.b = base[2] * (0.95 + (1 - blot) * 0.1) - pore * 0.02 + vein * 0.01;
-    o.rough = rough + pore * 0.12 - blot * 0.06 + cre * 0.05;
+    const hair = sstep(0.74, 0.9, fbm(u, v, 5, 150, 2, 101)) * sstep(0.35, 0.6, fbm(u, v, 3, 3, 3, 103));
+    const hk = 1 - hair * 0.35;
+    o.r = (base[0] * (0.94 + blot * 0.12) - pore * 0.03) * hk;
+    o.g = (base[1] * (0.95 + (1 - blot) * 0.08) - pore * 0.03 - vein * 0.01) * hk;
+    o.b = (base[2] * (0.95 + (1 - blot) * 0.1) - pore * 0.02 + vein * 0.01) * hk;
+    o.rough = rough + pore * 0.12 - blot * 0.06 + cre * 0.05 + hair * 0.15;
     o.metal = 0;
-    o.h = -pore * 0.5 - cre * 0.4 + blot * 0.1;
+    o.h = -pore * 0.5 - cre * 0.4 + blot * 0.1 + hair * 0.2;
   });
 }
 

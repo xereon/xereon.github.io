@@ -34,7 +34,7 @@ const FADE = 0.14;
 const SCALARS = ['magVis', 'bolt', 'slide', 'lhMag', 'lhBolt', 'lhFree', 'lhSil', 'sil', 'silRot', 'silVis', 'vis', 'nade', 'pin',
   'boltLift', 'rhBolt', 'rhFree', 'cover', 'shell', 'pump'];
 const VECS = ['gp', 'gr', 'mp', 'mr', 'lhFreeP', 'rp', 'rr', 'silP', 'rhFreeP'];
-const DISCRETE = ['lhPose', 'rhPose'];
+const STEPPED = ['magVis', 'vis', 'silVis', 'nade', 'shell'];   // visibility-like: never crossfaded
 // hand elbow offsets in camera space (in): forearm direction from the wrist
 const ELBOW_R = new THREE.Vector3(6, -6, 8);
 const ELBOW_L = new THREE.Vector3(-4.5, -7, 6.5);
@@ -81,7 +81,7 @@ export class Viewmodel {
     for (const k of SCALARS) { this.out[k] = 0; this.snap[k] = 0; }
     for (const k of VECS) { this.out[k] = [0, 0, 0]; this.snap[k] = [0, 0, 0]; }
     this.tmp3 = [0, 0, 0];
-    this.fireT = 9; this.fireDur = 0.1; this.pendingBolt = -1;
+    this.fireT = 9; this.fireDur = 0.1; this.pendingBolt = -1; this.pumpT = 9; this.dualSide = false;
     // procedural motion
     this.kick = new Spring(6, 260, 0.42);
     this.sway = new Spring(4, 90, 0.75);
@@ -149,6 +149,7 @@ export class Viewmodel {
       e.L = { p: lp, q: lq, pose: Rh.pose };
       e.magGrab = null;
     }
+    e.relPumpL = cfg.pumpTravel && e.parts.pump ? rel(e.L, e.parts.pump) : null;
     e.relMag = rel(e.magGrab, e.parts.mag);
     e.relCharge = rel(e.chargeGrab, e.parts.bolt);
     e.relSil = rel(e.silGrab, e.parts.silencer);
@@ -235,7 +236,7 @@ export class Viewmodel {
       if (!this.cur.parts.silencer) return;
       this.silenced[this.key] = anim === 'silencer_on' ? 1 : 0;
     }
-    if (anim === 'draw' || anim.startsWith('reload')) { this.persist.vis = 1; }
+    if (anim !== 'zoom_in') this.persist.vis = 1;
     const clip = makeClip(anim, cfg, def);
     if (!clip) return;
     if (anim === 'draw') { this.persist.slide = 0; this.persist.pin = 0; this.persist.nade = 0; }
@@ -265,6 +266,7 @@ export class Viewmodel {
     this.fireDur = Math.max(0.045, Math.min(0.12, ct * 0.85));
     this.fireT = 0;
     if (cfg.dual) this.dualSide = !this.dualSide;
+    if (cfg.pumpAction) this.pumpT = 0;
     if (last && cfg.family === 'pistol') this.persist.slide = 1;
     if (cfg.bolt) { this.pendingBolt = 0.22; this.persist.vis = 1; }
     if (this.clipName !== 'idle' && this.clipName !== 'draw' && this.clip && !this.clip.hold) this._startClip(null, 'idle');
@@ -275,15 +277,14 @@ export class Viewmodel {
     const c = this.clip, ch = c ? c.ch : null, P = this.persist, out = this.out;
     const w = noFade ? 1 : Math.min(1, this.fadeT / FADE);
     const k = w * w * (3 - 2 * w);
-    const base = (name) => (name === 'magVis' || name === 'vis' || name === 'silVis' ? (P[name] ?? 1)
-      : name === 'slide' || name === 'sil' || name === 'pin' || name === 'nade' ? P[name] : 0);
+    const base = this._base;
     for (const n of SCALARS) {
-      let v = ch && ch[n] ? sample(ch[n], t) : base(n);
+      let v = ch && ch[n] ? sample(ch[n], t) : base(n, P);
       if (n === 'slide') v = Math.max(v, 0);
       out[n] = k >= 1 ? v : this.snap[n] + (v - this.snap[n]) * k;
     }
     // discrete-valued visibility channels should not fade
-    for (const n of ['magVis', 'vis', 'silVis', 'nade', 'shell']) out[n] = ch && ch[n] ? sample(ch[n], t) : base(n);
+    for (const n of STEPPED) out[n] = ch && ch[n] ? sample(ch[n], t) : base(n, P);
     for (const n of VECS) {
       const o = out[n];
       if (ch && ch[n]) sample(ch[n], t, this.tmp3); else { this.tmp3[0] = this.tmp3[1] = this.tmp3[2] = 0; }
@@ -292,6 +293,13 @@ export class Viewmodel {
     }
     this.lhPose = ch?.lhPose ? samplePose(ch.lhPose, t, this._lhp || (this._lhp = ['', '', 0])) : null;
     this.rhPose = ch?.rhPose ? samplePose(ch.rhPose, t, this._rhp || (this._rhp = ['', '', 0])) : null;
+  }
+
+  // value of a channel when the active clip doesn't drive it (persistent end states)
+  _base(name, P) {
+    if (name === 'magVis' || name === 'vis' || name === 'silVis') return P[name] ?? 1;
+    if (name === 'slide' || name === 'sil' || name === 'pin' || name === 'nade') return P[name];
+    return 0;
   }
 
   update(dt, ent) {
@@ -371,7 +379,15 @@ export class Viewmodel {
     if (parts.trigger) parts.trigger.rotation.x = (fr < 1 ? 1 - fr : 0) * -12 * DEG;
     if (parts.hammer) parts.hammer.rotation.x = (fr < 1 ? Math.sin(fr * Math.PI) : 0) * 40 * DEG;
     if (parts.cover) parts.cover.rotation.x = -o.cover * 75 * DEG;
-    if (parts.pump) parts.pump.position.z = parts.pump.userData.rest.z + o.pump * (cfg.pumpTravel || 3.2);
+    if (parts.pump) {
+      let pc = 0;
+      if (cfg.pumpAction && this.pumpT < 0.62) {
+        this.pumpT += dt;
+        const t = (this.pumpT - 0.16) / 0.42;
+        pc = t <= 0 || t >= 1 ? 0 : t < 0.45 ? Math.sin((t / 0.45) * Math.PI / 2) : Math.cos(((t - 0.45) / 0.55) * Math.PI / 2);
+      }
+      parts.pump.position.z = parts.pump.userData.rest.z + Math.max(o.pump, pc) * (cfg.pumpTravel || 3.2);
+    }
     if (parts.silencer) {
       const s = parts.silencer;
       s.visible = o.silVis > 0.5;
@@ -529,10 +545,11 @@ export class Viewmodel {
     }
     if (e.L) {
       const p = this._tgtP.copy(e.L.p), q = this._tgtQ.copy(e.L.q);
+      if (e.relPumpL) this._blendPart(p, q, e.parts.pump, e.relPumpL, 1);
       if (o.lhMag > 0 && e.relMag) this._blendPart(p, q, e.parts.mag, e.relMag, o.lhMag);
       if (o.lhBolt > 0 && e.relCharge) this._blendPart(p, q, e.parts.bolt, e.relCharge, o.lhBolt);
       if (o.lhSil > 0 && e.relSil) this._blendPart(p, q, e.parts.silencer, e.relSil, o.lhSil);
-      if (o.lhFree > 0) {
+      if (o.lhFree > 0 && !cfg.dual) {
         this._v.set(o.lhFreeP[0], o.lhFreeP[1], o.lhFreeP[2]);
         p.lerp(this._v, o.lhFree);
         if (e.magGrab) q.slerp(e.magGrab.q, o.lhFree * 0.7);
@@ -556,18 +573,19 @@ export class Viewmodel {
     m.position.copy(palmP).sub(this._v);
   }
   _aimArms() {
-    const A = this.arms;
-    if (!A || !this.cur) return;
-    const rigInv = this._inv.copy(this.rig.matrixWorld).invert();
-    const doArm = (arm, off, on) => {
-      if (!on || !arm.mount.parent) return;
-      arm.mount.updateMatrixWorld(true);
-      const w = this._v.setFromMatrixPosition(arm.root.matrixWorld);
-      w.applyMatrix4(rigInv).add(off).applyMatrix4(this.rig.matrixWorld);
-      arm.aim(w);
-    };
-    doArm(A.R, this.cur.cfg.elbowR ? this._v2.set(...this.cur.cfg.elbowR) : ELBOW_R, !!this.cur.R);
-    doArm(A.L, this.cur.cfg.elbowL ? this._v2.set(...this.cur.cfg.elbowL) : ELBOW_L, !!this.cur.L);
+    const A = this.arms, c = this.cur;
+    if (!A || !c) return;
+    this._inv.copy(this.rig.matrixWorld).invert();
+    if (c.R) this._aimArm(A.R, c.cfg.elbowR ? this._v2.fromArray(c.cfg.elbowR) : ELBOW_R);
+    if (c.L) this._aimArm(A.L, c.cfg.elbowL ? this._v2.fromArray(c.cfg.elbowL) : ELBOW_L);
+  }
+  // forearm points from the wrist toward an elbow placed at a fixed offset in rig space
+  _aimArm(arm, off) {
+    if (!arm.mount.parent) return;
+    arm.mount.updateMatrixWorld(true);
+    const w = this._v.setFromMatrixPosition(arm.root.matrixWorld);
+    w.applyMatrix4(this._inv).add(off).applyMatrix4(this.rig.matrixWorld);
+    arm.aim(w);
   }
 
   _muzzleAnchor() {

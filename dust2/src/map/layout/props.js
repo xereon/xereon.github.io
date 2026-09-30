@@ -8,6 +8,7 @@ export function crate(K, pos, size = 64, yaw = 0, variant = 0) {
   K.prop('crate', [[sx, sz, sy], variant], pos, yaw, () => K.obox(pos, [sx, sy, sz], yaw, 'wood_crate'));
 }
 function tarpCrate(K, pos, size = 64, yaw = 0, color = 'teal', variant = 0) {
+  K.emitter('amb_tarp', [pos[0], pos[1], pos[2] + size], 700);
   K.prop('tarpCrate', [size, color, variant], pos, yaw, () => {
     K.obox(pos, [size, size, size], yaw, 'wood_crate');
     K.obox([pos[0], pos[1], pos[2] + size], [size + 4, size + 4, 3], yaw, 'cloth_tarp', { col: false });

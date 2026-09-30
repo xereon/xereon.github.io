@@ -33,7 +33,7 @@ export function build(K) {
   ], 96), { mat: 'concrete_floor', bottom: 36, top: 400, tops: { 1: 128, 2: 128, 3: 128, 4: 128 }, paint: ochre, cornice: {} });
   K.stairs('a_steps', [[1001, 2780], [1245, 2780], [1245, 2830], [1001, 2830]], 96, 120, 3, { mat: 'stone_block', tops: { e: 128, w: 400 } });
   K.region('a_north', zc([[1001, 2830], [1245, 2830], [1245, 2790], [1265, 2790], [1598, 2790], [1598, 3089], [1001, 3089]], 120),
-    { mat: 'concrete_floor', top: 420, tops: { 1: 128, 2: 128 }, paint: ochre, cornice: {} });
+    { mat: 'concrete_floor', top: 420, tops: { 1: 128, 2: 128, 4: 480, 5: 540 }, paint: ochre, cornice: {}, windows: 'arched' });
   K.region('aramp', zy([[1265, 2297], [1629, 2297], [1629, 2790], [1265, 2790]], 2297, -2, 2790, 112),
     { base: { h: 6, out: 10, mat: 'concrete_floor', alt: { len: 56, mats: ['plaster_wall#red', 'plaster_wall#white'] } }, mat: 'concrete_floor', top: 420, tops: { w: 128 }, paint: teal, cornice: {} });
 
