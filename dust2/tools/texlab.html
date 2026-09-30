@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Texture Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --bg: #15130f; --fg: #e8dcc6; --dim: #9a8f7c; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 12px/1.3 ui-monospace, Menlo, Consolas, monospace; }
+  canvas { display: block; }
+  #labels { position: absolute; inset: 0; pointer-events: none; }
+  .lab { position: absolute; padding: 2px 6px; background: rgba(0,0,0,.55); color: var(--fg); }
+  .lab small { color: var(--dim); }
+  #stat { position: fixed; right: 6px; bottom: 4px; color: var(--dim); background: rgba(0,0,0,.6); padding: 2px 6px; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="stat"></div>
+<script type="module">
+// Texture lab: swatch board for TextureLib (see tools/texlab.mjs).
+//   ?keys=a,b          materials to show (default all)
+//   ?view=board        per material: 3x3 tiled plane | sphere | wall corner (world uvs)
+//   ?view=maps         per material: albedo | normal | AO | roughness | metalness (flat)
+//   ?view=wall&keys=k  one big corner + plane, for close critique
+//   ?view=decals       every decal on a concrete wall
+//   ?cell=WxH          cell size (default 420x300)
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+import { TextureLib } from '../src/art/textures.js';
+
+const P = new URLSearchParams(location.search);
+World.quality = P.get('quality') || 'high';
+const view = P.get('view') || 'board';
+const [CW, CH] = (P.get('cell') || (view === 'wall' ? '960x620' : view === 'maps' ? '256x256' : '420x300')).split('x').map(Number);
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = +(P.get('exposure') || 1.0);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+window.renderer = renderer;
+TextureLib.setRenderer(renderer);
+
+const t0 = performance.now();
+await TextureLib.ready;
+// force GPU completion so the timing is honest
+{ const px = new Uint8Array(4); const rt = new THREE.WebGLRenderTarget(1, 1); renderer.setRenderTarget(rt); renderer.readRenderTargetPixels(rt, 0, 0, 1, 1, px); renderer.setRenderTarget(null); rt.dispose(); }
+const bakeMs = performance.now() - t0;
+
+const keys = (P.get('keys') || TextureLib.keys().join(',')).split(',').filter(Boolean);
+const labels = document.getElementById('labels');
+function label(x, y, html) { const d = document.createElement('div'); d.className = 'lab'; d.style.left = x + 'px'; d.style.top = y + 'px'; d.innerHTML = html; labels.appendChild(d); }
+
+// ---- lighting rig shared by the 3D views --------------------------------------------------
+function rig(scene, target, size) {
+  const hemi = new THREE.HemisphereLight(0xbcd3ef, 0x9a7e58, 1.15);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffeed8, 3.4);
+  sun.position.copy(target).add(new THREE.Vector3(0.55, 0.75, 0.42).normalize().multiplyScalar(size * 3));
+  sun.target.position.copy(target);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const s = sun.shadow.camera; s.left = s.bottom = -size * 1.2; s.right = s.top = size * 1.2; s.near = 1e-3 * size; s.far = size * 8;
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.01 * size / 256;
+  scene.add(sun, sun.target);
+  scene.background = new THREE.Color(0x9fbfe0);
+}
+
+// sky-ish environment for plausible specular
+const pmrem = new THREE.PMREMGenerator(renderer);
+{
+  const es = new THREE.Scene();
+  const g = new THREE.SphereGeometry(10, 32, 16);
+  const m = new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: 'varying vec3 p; void main(){ p = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+    fragmentShader: 'varying vec3 p; void main(){ float y = normalize(p).y; vec3 sky = mix(vec3(0.75,0.82,0.9), vec3(0.35,0.55,0.85), smoothstep(0.,1.,y)); vec3 gr = vec3(0.45,0.37,0.26); gl_FragColor = vec4(y > 0. ? sky : gr, 1.); }' });
+  es.add(new THREE.Mesh(g, m));
+  var envTex = pmrem.fromScene(es, 0.02).texture;
+}
+
+// (a) 3x3 tiled plane
+const planeScene = new THREE.Scene(); planeScene.environment = envTex; planeScene.environmentIntensity = 0.5;
+rig(planeScene, new THREE.Vector3(0, 0, 0), 2);
+const plane = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), null);
+plane.rotation.x = -Math.PI / 2; plane.receiveShadow = true; planeScene.add(plane);
+const planeCam = new THREE.PerspectiveCamera(50, CW / CH, 0.01, 50);
+planeCam.position.set(0, 1.25, 2.35); planeCam.lookAt(0, 0, -0.45);
+
+// (b) sphere
+const sphScene = new THREE.Scene(); sphScene.environment = envTex; sphScene.environmentIntensity = 0.5;
+rig(sphScene, new THREE.Vector3(), 2);
+const sph = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), null); sph.castShadow = sph.receiveShadow = true; sphScene.add(sph);
+const sphCam = new THREE.PerspectiveCamera(40, CW / CH, 0.1, 50); sphCam.position.set(0, 0.6, 3.2); sphCam.lookAt(0, 0, 0);
+
+// (c) corner of two walls + floor, world-space uvs at real texel density
+const FLOOR_KEYS = new Set(['sand_floor', 'sand_blend', 'gravel', 'concrete_floor', 'tile_floor', 'rubble']);
+function cornerScene(key) {
+  const inf = TextureLib.info(key) || { world: 256 };
+  const W = 256;
+  const sc = new THREE.Scene(); sc.environment = envTex; sc.environmentIntensity = 0.5;
+  rig(sc, new THREE.Vector3(-W * 0.2, 40, -W * 0.2), W);
+  const wallKey = FLOOR_KEYS.has(key) ? 'plaster_wall' : key;
+  const floorKey = FLOOR_KEYS.has(key) ? key : 'sand_floor';
+  const wm = TextureLib.material(wallKey, { world: true });
+  const fm = TextureLib.material(floorKey, { world: true });
+  const box = (sx, sy, sz, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; sc.add(b); return b; };
+  box(3 * W, 16, 3 * W, 0, -8, 0, fm);
+  box(3 * W, 220, 16, 0, 110, -W * 0.5 - 8, wm);
+  box(16, 220, 3 * W, -W * 0.5 - 8, 110, 0, wm);
+  box(48, 48, 48, -W * 0.5 + 40, 24, -W * 0.5 + 60, TextureLib.material('wood_crate', { world: true }));
+  const cam = new THREE.PerspectiveCamera(70, CW / CH, 1, 5000);
+  cam.position.set(W * 0.42, 64, W * 0.62); cam.lookAt(-W * 0.35, 52, -W * 0.3);
+  return { sc, cam };
+}
+
+// flat map viewer
+const flatScene = new THREE.Scene();
+const flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const flatMat = new THREE.ShaderMaterial({
+  uniforms: { t: { value: null }, mode: { value: 0 }, enc: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
+  fragmentShader: `uniform sampler2D t; uniform int mode; uniform int enc; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(t, vUv); vec3 o = c.rgb;
+      if (mode == 1) o = vec3(c.r); else if (mode == 2) o = vec3(c.g); else if (mode == 3) o = vec3(c.b); else if (mode == 4) o = vec3(c.a);
+      if (enc == 1) o = pow(o, vec3(1.0 / 2.2));
+      gl_FragColor = vec4(o, 1.);
+    }`,
+});
+flatMat.toneMapped = false;
+flatScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), flatMat));
+
+function renderCell(scene, cam, x, y, w, h, H) {
+  renderer.setViewport(x, H - y - h, w, h);
+  renderer.setScissor(x, H - y - h, w, h);
+  renderer.render(scene, cam);
+}
+
+function layout(cols, rows) {
+  const W = cols * CW, H = rows * CH;
+  renderer.setSize(W, H, true);
+  renderer.setScissorTest(true);
+  renderer.autoClear = true;
+  return [W, H];
+}
+
+const st = TextureLib.stats();
+if (view === 'board') {
+  const [, H] = layout(3, keys.length);
+  keys.forEach((k, i) => {
+    const y = i * CH;
+    plane.material = TextureLib.material(k, { repeat: 3 });
+    renderCell(planeScene, planeCam, 0, y, CW, CH, H);
+    sph.material = TextureLib.material(k, { repeat: [2, 1] });
+    renderCell(sphScene, sphCam, CW, y, CW, CH, H);
+    const c = cornerScene(k);
+    renderCell(c.sc, c.cam, 2 * CW, y, CW, CH, H);
+    const inf = TextureLib.info(k);
+    label(4, y + 4, `${k} <small>${inf?.world}u/tile · ${st.perKey[k] ?? '?'}ms</small>`);
+  });
+} else if (view === 'wall') {
+  const [, H] = layout(1, keys.length * 2);
+  keys.forEach((k, i) => {
+    const c = cornerScene(k);
+    renderCell(c.sc, c.cam, 0, i * 2 * CH, CW, CH, H);
+    plane.material = TextureLib.material(k, { repeat: 3 });
+    renderCell(planeScene, planeCam, 0, (i * 2 + 1) * CH, CW, CH, H);
+    label(4, i * 2 * CH + 4, k);
+  });
+} else if (view === 'maps') {
+  const modes = [['map', 0, 'albedo'], ['normalMap', 0, 'normal'], ['orm', 1, 'AO'], ['orm', 2, 'rough'], ['orm', 3, 'metal']];
+  const [, H] = layout(modes.length, keys.length);
+  keys.forEach((k, i) => {
+    const mp = TextureLib.maps(k);
+    modes.forEach(([mk, mode, nm], j) => {
+      flatMat.uniforms.t.value = mp[mk]; flatMat.uniforms.mode.value = mode; flatMat.uniforms.enc.value = mk === 'map' ? 1 : 0;
+      renderCell(flatScene, flatCam, j * CW, i * CH, CW, CH, H);
+      label(j * CW + 2, i * CH + 2, `${k} <small>${nm}</small>`);
+    });
+  });
+} else if (view === 'decals') {
+  const types = TextureLib.decalTypes();
+  const [, H] = layout(types.length, 1);
+  const sc = new THREE.Scene(); sc.environment = envTex; sc.environmentIntensity = 0.5;
+  rig(sc, new THREE.Vector3(), 32);
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), null); sc.add(wall);
+  const dm = new THREE.MeshStandardMaterial({ transparent: true, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false, roughness: 0.9 });
+  const dq = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), dm); dq.position.z = 0.01; sc.add(dq);
+  const cam = new THREE.PerspectiveCamera(40, CW / CH, 0.1, 200); cam.position.set(4, 3, 22); cam.lookAt(0, 0, 0);
+  const wallFor = { bullet_wood: 'wood_planks', bullet_metal: 'metal_door', bullet_sand: 'sand_floor', bullet_glass: 'glass', bullet_plaster: 'plaster_wall' };
+  types.forEach((t, j) => {
+    wall.material = TextureLib.material(wallFor[t] || 'concrete_wall', { repeat: 0.2 });
+    const d = TextureLib.decal(t);
+    dm.map = d; dm.normalMap = d?.normalMap || null; dm.needsUpdate = true;
+    renderCell(sc, cam, j * CW, 0, CW, CH, H);
+    label(j * CW + 2, 2, t);
+  });
+}
+
+document.getElementById('stat').textContent = `bake ${bakeMs.toFixed(0)} ms (lib ${st.ms} ms, ${st.mode}) · ${keys.length} materials · ${renderer.info.memory.textures} textures`;
+window.__TEXLAB = { bakeMs, stats: st, maxAniso: renderer.capabilities.getMaxAnisotropy() };
+window.__TEXLAB_READY = true;
+</script>
+</body>
+</html>

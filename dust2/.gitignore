@@ -1,0 +1,9 @@
+# Everything in this game is procedural. Screenshots, reference frames (Valve-copyrighted,
+# evaluation-only) and audio dumps must never be committed.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.wav
+*.mp4
+node_modules/
