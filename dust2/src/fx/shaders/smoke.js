@@ -90,6 +90,9 @@ uniform float uHasDepth;
 uniform vec2 uDepthRes;
 uniform vec2 uNearFar;
 uniform vec2 uNearFade;
+uniform vec4 uCutA[8];   // start.xyz, time
+uniform vec4 uCutB[8];   // end.xyz, unused
+uniform float uTime;
 varying vec4 vUvAB;
 varying float vBlend;
 varying float vAlpha;
@@ -101,6 +104,21 @@ varying float vFloorY;
 varying float vSize;
 #include <fog_pars_fragment>
 const float PI = 3.14159265;
+// Bullets punch short-lived tunnels through the smoke (CS2 behaviour).
+float carve(vec3 p) {
+  float k = 1.0;
+  for (int i = 0; i < 8; i++) {
+    float age = uTime - uCutA[i].w;
+    if (age < 0.0 || age > 2.2) continue;
+    vec3 a = uCutA[i].xyz, ab = uCutB[i].xyz - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-3), 0.0, 1.0);
+    float d = length(a + ab * t - p);
+    float r = 7.0 + 16.0 * smoothstep(0.0, 0.25, age);
+    float open = 1.0 - smoothstep(0.35, 2.2, age);
+    k *= 1.0 - open * (1.0 - smoothstep(r * 0.45, r, d));
+  }
+  return k;
+}
 float linDepth(float d) {
   float n = uNearFar.x, f = uNearFar.y;
   return 2.0 * n * f / (f + n - (d * 2.0 - 1.0) * (f - n));
@@ -133,6 +151,7 @@ void main() {
   }
   a *= smoothstep(vFloorY, vFloorY + vSize * 0.3, vWorld.y);
   a *= smoothstep(uNearFade.x, uNearFade.y, -vViewPos.z);
+  a *= carve(vWorld);
   #ifdef USE_FOG
     #ifdef FOG_EXP2
       float fogF = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);

@@ -612,9 +612,35 @@ export class Kit {
   }
 
   _wall(R, e, u0, u1, topOverride = null) {
-    const A = this._ptOn(e, u0), B = this._ptOn(e, u1);
     const eTop = topOverride ?? e.top;
     const wallTop = R.o.arch ? R.o.arch.spring : (R.ceil != null ? Math.min(eTop, R.ceil) : eTop);
+    // chamfer exposed (reflex) building corners by a few units so they don't read as boxes
+    const U0 = u0, U1 = u1;
+    if (R.ceil == null && !R.o.stairOf) {
+      const C = 3;
+      const prev = R.edges[(e.k - 1 + R.n) % R.n], next = R.edges[(e.k + 1) % R.n];
+      const wallEnd = (ed) => { const q = ed.segs[ed.segs.length - 1]; return q && !q.N && !ed.noWall; };
+      const wallStart = (ed) => { const q = ed.segs[0]; return q && !q.N && !ed.noWall; };
+      const reflex = (ea, eb) => ea.ux * eb.uy - ea.uy * eb.ux < -0.2;
+      if (u0 < 1e-6 && e.len > 4 * C && wallEnd(prev) && reflex(prev, e) && prev.len > 4 * C) u0 = C / e.len;
+      if (u1 > 1 - 1e-6 && e.len > 4 * C && wallStart(next) && reflex(e, next) && next.len > 4 * C) {
+        u1 = 1 - C / e.len;
+        const P = this._ptOn(e, u1), Q = this._ptOn(next, C / next.len);
+        const t = Math.min(wallTop, next.top);
+        if (t > Math.max(P.z, Q.z) + 1) {
+          const mat = e.wallMat, S = this.texWorld(mat);
+          const s0 = -(e.s0 + u1 * e.len) / S, s1 = -(e.s0 + e.len + C) / S;
+          const nx = (e.nx + next.nx), ny = (e.ny + next.ny), nl = Math.hypot(nx, ny) || 1;
+          const n = [-nx / nl, -ny / nl, 0];
+          const c = (x, y, z, zf) => this._wallCol(R, x, y, z, zf, t);
+          this.quad(mat, [Q.x, Q.y, Q.z], [P.x, P.y, P.z], [P.x, P.y, t], [Q.x, Q.y, t],
+            [s1, Q.z / S], [s0, P.z / S], [s0, t / S], [s1, t / S], c(Q.x, Q.y, Q.z, Q.z), c(P.x, P.y, P.z, P.z), c(P.x, P.y, t, P.z), c(Q.x, Q.y, t, Q.z), n);
+          if (R.o.cap !== false) this.poly(R.o.capMat ?? mat, [[P.x, P.y, t], [Q.x, Q.y, t], [e.b.x + e.nx * 2, e.b.y + e.ny * 2, t]], { col: 0.97, normal: [0, 0, 1] });
+          this.walls.push({ R, A: { x: P.x, y: P.y }, B: { x: Q.x, y: Q.y }, top: t, seedTop: t, zfA: P.z, zfB: Q.z, nx: -n[0], ny: -n[1], cap: 0, thick: 64, chamfer: true });
+        }
+      }
+    }
+    const A = this._ptOn(e, u0), B = this._ptOn(e, u1);
     if (wallTop <= Math.min(A.z, B.z) + 0.5) return;
     const mat = e.wallMat;
     const S = this.texWorld(mat);
@@ -661,8 +687,8 @@ export class Kit {
     }
     // base trim (plinth) and top cornice
     const base = R.o.base === undefined ? (R.ceil == null ? { h: 10, out: 2.5, mat: 'stone_block' } : false) : R.o.base;
-    if (base) this._trim(R, e, u0, u1, 'base', base);
-    if (R.o.cornice && R.ceil == null) this._trim(R, e, u0, u1, 'cornice', { h: 8, out: 4, mat: 'plaster_trim', ...R.o.cornice }, wallTop);
+    if (base) this._trim(R, e, U0, U1, 'base', base);
+    if (R.o.cornice && R.ceil == null) this._trim(R, e, U0, U1, 'cornice', { h: 8, out: 4, mat: 'plaster_trim', ...R.o.cornice }, wallTop);
     // collision
     const zc = R.ceil != null ? R.ceilTop : wallTop;
     const Tc = Math.max(2, T - 0.5);

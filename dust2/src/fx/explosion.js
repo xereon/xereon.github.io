@@ -29,13 +29,13 @@ export function explosionFx(fx, pos, opts = {}) {
 
   // blinding core
   S.reset(); S.pos.copy(pos).setY(pos.y + 10 * sc);
-  S.life = 0.16; S.size0 = 60 * sc; S.size1 = 110 * sc;
-  S.c0.set(14, 9, 4.5, 1); S.c1.set(6, 2.5, 0.6, 0);
+  S.life = 0.14; S.size0 = 45 * sc; S.size1 = 90 * sc;
+  S.c0.set(4.5, 3.0, 1.4, 1); S.c1.set(2, 0.8, 0.2, 0);
   S.sprite = SPR.GLOW; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.2;
   pool.emit(S, now);
   S.reset(); S.pos.copy(pos).setY(pos.y + 10 * sc);
-  S.life = 0.09; S.size0 = 45 * sc; S.size1 = 70 * sc; S.rot = R() * 6.283;
-  S.c0.set(18, 14, 8, 1); S.c1.set(10, 6, 2, 0);
+  S.life = 0.08; S.size0 = 35 * sc; S.size1 = 55 * sc; S.rot = R() * 6.283;
+  S.c0.set(9, 7, 4, 1); S.c1.set(4, 2.5, 0.8, 0);
   S.sprite = SPR.FLARE; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.3;
   pool.emit(S, now);
 
@@ -50,9 +50,10 @@ export function explosionFx(fx, pos, opts = {}) {
     S.vel.copy(_d).multiplyScalar((220 + R() * 260) * sc);
     S.drag = 5.5; S.gravity = -0.1;
     S.life = 1.8 + R() * 1.2;
-    S.size0 = (10 + R() * 8) * sc; S.size1 = (48 + R() * 26) * sc;
+    S.size0 = (14 + R() * 8) * sc; S.size1 = (55 + R() * 25) * sc;
+    S.sizePow = 7;
     S.rot = R() * 6.283; S.rotVel = (R() - 0.5) * 0.8;
-    S.c0.set(1.3, 1.0, 0.85, 0.95); S.c1.set(0.075, 0.07, 0.065, 0.5);
+    S.c0.set(0.9, 0.75, 0.6, 0.95); S.c1.set(0.075, 0.07, 0.065, 0.5);
     S.restitution = 0.16 + R() * 0.08; // heat fraction of life
     S.sprite = SPR.SMOKE0; S.frames = 16;
     S.flags = PF.FIREBALL | PF.SOFT | PF.TURB;
@@ -68,8 +69,9 @@ export function explosionFx(fx, pos, opts = {}) {
     S.drag = 4; S.gravity = -0.15;
     S.life = 0.35 + R() * 0.25;
     S.size0 = (18 + R() * 12) * sc; S.size1 = (40 + R() * 20) * sc;
+    S.sizePow = 4;
     S.rot = (R() - 0.5) * 0.6;
-    S.c0.set(1.0, 5.0, 0, 1); S.c1.set(0.7, 3.0, 0, 1);
+    S.c0.set(1.0, 1.6, 0, 1); S.c1.set(0.7, 1.0, 0, 1);
     S.sprite = SPR.FIRE0; S.frames = 16;
     S.flags = PF.FIRE | PF.ADD | PF.SOFT;
     S.fadeIn = 0; S.fadeOut = 0.5; S.floorY = floorY;
@@ -106,12 +108,29 @@ export function explosionFx(fx, pos, opts = {}) {
       S.vel.y = 20 + R() * 40;
       S.drag = 3.4; S.gravity = -0.02;
       S.life = 2.2 + R() * 1.4;
-      S.size0 = 8 * sc; S.size1 = (36 + R() * 22) * sc;
+      S.size0 = 10 * sc; S.size1 = (44 + R() * 24) * sc; S.sizePow = 4;
       S.rot = R() * 6.283; S.rotVel = (R() - 0.5) * 0.8;
-      S.c0.set(_c.r, _c.g, _c.b, 0.6); S.c1.set(_c.r, _c.g, _c.b, 0.25);
+      S.c0.set(_c.r, _c.g, _c.b, 0.7); S.c1.set(_c.r, _c.g, _c.b, 0.3);
       S.sprite = SPR.SMOKE0 + 2; S.frames = 14;
       S.flags = PF.LIT | PF.SOFT | PF.TURB;
       S.fadeIn = 0.02; S.fadeOut = 0.35; S.sun = sun; S.floorY = floorY; S.seed = R();
+      pool.emit(S, now);
+    }
+    // thick dust kicked up at the centre
+    for (let i = 0; i < Math.round(8 * k * sc); i++) {
+      S.reset();
+      randCone(_up, 0.5, R, _d);
+      S.pos.set(pos.x + (R() - 0.5) * 30, floorY + 10, pos.z + (R() - 0.5) * 30);
+      S.vel.copy(_d).multiplyScalar(180 + R() * 220);
+      S.drag = 2.8; S.gravity = 0.05;
+      S.life = 2.5 + R() * 1.5;
+      S.size0 = 16 * sc; S.size1 = (50 + R() * 25) * sc; S.sizePow = 4;
+      S.rot = R() * 6.283; S.rotVel = (R() - 0.5) * 0.6;
+      S.c0.set(_c.r * 0.9, _c.g * 0.9, _c.b * 0.9, 0.75); S.c1.set(_c.r, _c.g, _c.b, 0.3);
+      S.sprite = SPR.SMOKE0; S.frames = 16;
+      S.flags = PF.LIT | PF.SOFT | PF.TURB | PF.NEARFADE;
+      S.fadeIn = 0.02; S.fadeOut = 0.4; S.sun = sun; S.floorY = floorY; S.seed = R();
+      S.delay = 0.02;
       pool.emit(S, now);
     }
     // flat blast ring on the ground
@@ -145,7 +164,7 @@ export function explosionFx(fx, pos, opts = {}) {
   }
   // light + smoke punch-through + view punch
   _p.copy(pos).setY(pos.y + 30);
-  fx.lights.spawn(now, _p, 0xffa24a, 3.2e6 * sc, 1400 * sc, 0.42, { prio: 3, hold: 0.03 });
+  fx.lights.spawn(now, _p, 0xffa24a, 3.0e5 * sc, 1300 * sc, 0.45, { prio: 3, hold: 0.04 });
   fx.smokes.blast(pos, now);
   const L = World.local;
   if (L?.viewPunch) {

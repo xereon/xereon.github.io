@@ -307,7 +307,7 @@ const SHOTS = {
     },
   },
   shells: {
-    cam: [v3(60, 40, 120), 20, 120], t: 1.8,
+    cam: [v3(70, 42, 230), 22, 118], t: 1.8,
     acts: (fx) => {
       const a = [];
       for (let i = 0; i < 12; i++) a.push([i * 0.1, () => fx.shell(v3(0, 60, 60), v3(20, 140 + (i % 3) * 20, 90 + (i % 4) * 10), i % 5 === 4 ? 'nova' : 'ak47')]);
@@ -315,27 +315,46 @@ const SHOTS = {
     },
   },
   blood: {
-    cam: [v3(-60, 70, -150), 5, 60], t: 0.12,
-    acts: (fx) => [[0, () => { fx.blood(v3(-20, 60, -300), v3(0, 0, -1), 1); fx.blood(v3(10, 52, -290), v3(0.2, -0.1, -1), 1); }]],
+    cam: [v3(-60, 70, -210), 7, 121], t: 0.1,
+    acts: (fx) => [[0, () => { fx.blood(v3(-150, 62, -330), v3(0.05, -0.05, -1), 1); }], [0.03, () => fx.blood(v3(-160, 48, -334), v3(-0.1, -0.15, -1), 1)]],
   },
   blood_after: {
-    cam: [v3(-60, 70, -150), 5, 60], t: 3,
-    acts: (fx) => [[0, () => { fx.blood(v3(-20, 60, -300), v3(0, 0, -1), 1); fx.blood(v3(10, 52, -290), v3(0.2, -0.1, -1), 1); }]],
+    cam: [v3(-60, 70, -210), 7, 121], t: 3,
+    acts: (fx) => [[0, () => { fx.blood(v3(-150, 62, -330), v3(0.05, -0.05, -1), 1); }], [0.03, () => fx.blood(v3(-160, 48, -334), v3(-0.1, -0.15, -1), 1)]],
   },
   smoke_0_5s: { cam: [v3(0, 90, 520), 5, 90], t: 0.5, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
   smoke_1s: { cam: [v3(0, 90, 520), 5, 90], t: 1.0, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
   smoke_3s: { cam: [v3(0, 90, 520), 5, 90], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
   smoke_15s: { cam: [v3(0, 90, 520), 5, 90], t: 15, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
   smoke_17s: { cam: [v3(0, 90, 520), 5, 90], t: 17, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
-  smoke_backlit: { cam: [v3(-300, 70, -300), -8, 45 - 180 + 20], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
+  smoke_backlit: { cam: [v3(-330, 70, -330), -4, -45], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
+  smoke_bullets: {
+    cam: [v3(0, 64, 420), 0, 90], t: 3.0,
+    acts: (fx) => {
+      const a = [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]];
+      for (let i = 0; i < 7; i++) {
+        a.push([2.55 + i * 0.06, () => {
+          const to = v3(-40 + i * 14, 48 + (i % 3) * 14, -380);
+          fx.tracer(v3(-8, 60, 400), to, 'ak47');
+          fx.impact(to, v3(0, 0, 1), 'plaster');
+        }]);
+      }
+      return a;
+    },
+  },
   smoke_edge: { cam: [v3(0, 64, 200), 0, 90], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
   smoke_inside: { cam: [v3(20, 64, 30), 0, 90], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, 0)); }]] },
   smoke_corridor: { cam: [v3(300, 420, 60), 45, 120], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, -440)); }]] },
   smoke_top: { cam: [v3(0, 900, 10), 89, 90], t: 3, acts: (fx) => [[0, () => { L.smoke = fx.smoke(v3(0, 2, -440)); }]] },
+  flash_3p: { cam: [v3(0, 64, 350), 0, 90], t: 0.03, dead: true, acts: (fx) => [[0, () => fx.flash(v3(0, 90, 0))]] },
+  muzzle_close: {
+    cam: [v3(-10, 66, 45), 2, 90 - 30], t: 0.017,
+    acts: (fx) => [[0, () => fx.muzzleFlash(v3(-40, 64, 0), v3(1, 0, -0.1).normalize(), 'ak47')]],
+  },
   flash: { cam: [v3(0, 64, 350), 0, 90], t: 0.03, acts: (fx) => [[0, () => fx.flash(v3(0, 90, 0))]] },
   flash_after: { cam: [v3(0, 64, 350), 0, 90], t: 2.6, acts: (fx) => [[0, () => fx.flash(v3(0, 90, 0))]] },
-  he_fireball: { cam: [v3(0, 80, 420), 3, 90], t: 0.1, acts: (fx) => [[0, () => fx.explosion(v3(0, 2, 0))]] },
-  he_0_4s: { cam: [v3(0, 80, 420), 3, 90], t: 0.4, acts: (fx) => [[0, () => fx.explosion(v3(0, 2, 0))]] },
+  he_fireball: { cam: [v3(0, 80, 360), 3, 90], t: 0.1, acts: (fx) => [[0, () => fx.explosion(v3(0, 2, 0))]] },
+  he_0_4s: { cam: [v3(0, 80, 360), 3, 90], t: 0.4, acts: (fx) => [[0, () => fx.explosion(v3(0, 2, 0))]] },
   he_2s: { cam: [v3(0, 80, 420), 3, 90], t: 2.0, acts: (fx) => [[0, () => fx.explosion(v3(0, 2, 0))]] },
   molotov_1s: { cam: [v3(0, 110, 330), 12, 90], t: 1.0, acts: (fx) => [[0, () => { L.fire = fx.fire(v3(0, 1, 0), v3(0, 1, 0)); }]] },
   molotov_4s: { cam: [v3(0, 110, 330), 12, 90], t: 4.0, acts: (fx) => [[0, () => { L.fire = fx.fire(v3(0, 1, 0), v3(0, 1, 0)); }]] },
@@ -351,6 +370,7 @@ async function run(name) {
   fx.reseed(1337);
   World.paused = false;
   L.gun.visible = !!S.gun;
+  L.local.alive = !S.dead;
   const [eye, pitch, yaw, fov] = S.cam;
   setCam(eye, pitch, yaw, fov);
   const acts = S.acts(fx).sort((a, b) => a[0] - b[0]);

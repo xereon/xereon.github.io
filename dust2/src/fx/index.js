@@ -32,7 +32,7 @@ import { viewmodelToWorldMatched } from './util.js';
 defCvar('fx_particles', 1, 0.25, 2, 'particle count multiplier');
 defCvar('fx_muzzle_light', 1, 0, 1, 'dynamic light from muzzle flashes');
 defCvar('fx_muzzle_bright', 1, 0.2, 3, 'muzzle flash HDR brightness');
-defCvar('fx_muzzle_view_scale', 1, 0.3, 2, 'viewmodel muzzle flash size');
+defCvar('fx_muzzle_view_scale', 0.75, 0.3, 2, 'viewmodel muzzle flash size');
 defCvar('fx_tracer_speed', 9000, 2000, 20000, 'tracer visual speed (u/s)');
 defCvar('fx_tracer_width', 0.9, 0.2, 4, 'tracer width (u)');
 defCvar('fx_tracer_bright', 7, 0, 30, 'tracer HDR brightness');
@@ -52,6 +52,8 @@ export class FX {
     this.scale = 1;
     this.shake = 0;
     this.flashAfterimage = null;
+    this._shooter = new THREE.Vector3();
+    this._shooterOk = false;
     this.drawsFlashAfterimage = true;
 
     const r = World.renderer?.renderer || World.renderer?.gl || null;
@@ -85,6 +87,7 @@ export class FX {
 
     this._unsub = [
       World.on('impact', (e) => this._onImpact(e)),
+      World.on('fire', (e) => this._onFire(e)),
       World.on('damage', (e) => this._onDamage(e)),
       World.on('footstep', (e) => this._onFootstep(e)),
       World.on('land', (e) => this._onLand(e)),
@@ -134,6 +137,7 @@ export class FX {
     let a = from;
     const cam = World.camera;
     if (cam && (opts?.viewmodel || (cam.position.distanceToSquared(from) < 70 * 70))) a = viewmodelToWorldMatched(from, _v);
+    this.smokes.cut(a, to, this.now);
     this.tracers.spawn(this.now, a, to, {
       speed: this.cvar('fx_tracer_speed', 9000),
       width: this.cvar('fx_tracer_width', 0.9) * (/awp|ssg08|g3sg1|scar20|deagle/.test(key || '') ? 1.3 : 1),
@@ -204,7 +208,7 @@ export class FX {
     if (!this.viewLight) return;
     this.viewLight.position.copy(pos).addScaledVector(dir, 3);
     this.viewLightT = this.now;
-    this.viewLightPeak = 900 * k;
+    this.viewLightPeak = 450 * k;
   }
 
   reset(decalsToo = true) {
@@ -228,8 +232,18 @@ export class FX {
     }
   }
 
+  _onFire(e) {
+    const ent = e?.ent;
+    if (!ent) { this._shooterOk = false; return; }
+    if (ent.eyePos) ent.eyePos(this._shooter);
+    else if (ent.origin) this._shooter.copy(ent.origin).setY(ent.origin.y + (ent.eyeHeight ?? 64));
+    else { this._shooterOk = false; return; }
+    this._shooterOk = true;
+  }
+
   _onImpact(e) {
     if (!e?.point) return;
+    if (this._shooterOk) this.smokes.cut(this._shooter, e.point, this.now);
     this.impact(e.point, e.normal, e.surface, e.entity ? e : null);
   }
   _onDamage(e) {

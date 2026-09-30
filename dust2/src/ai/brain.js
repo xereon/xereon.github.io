@@ -289,6 +289,9 @@ export class Bot {
       this.setGoal('trade', this.threatPos, { radius: 120, look: this.threatPos });
       return;
     }
+    // no rifle? grab one lying nearby once the area is quiet (walk-over pickup fills the slot)
+    if (!this.target && now - this.lostAt > 2 && this.task !== 'plant' && this.task !== 'defuse' && this.task !== 'flee' &&
+        !WI.slotItem(this.ent, 'primary') && this.lookForGun(now)) return;
     team.decide(this, now);
     this.updatePreaim();
     if (!this.nade && now >= this.nextNade) this.considerUtility(now);
@@ -301,6 +304,25 @@ export class Bot {
       this.coverOk = !!spots?.length;
       if (this.coverOk) World.nav.pos(spots[0], this.coverPt);
     }
+  }
+
+  lookForGun(now) {
+    const items = World.weapons?.items;
+    if (!items?.length) return false;
+    const o = this.ent.origin;
+    let best = null, bd = 650 * 650;
+    for (const it of items) {
+      const d = it.inst?.def;
+      if (!d || d.slot !== 'primary' || !it.pos) continue;
+      const dy = it.pos.y - o.y;
+      if (dy < -80 || dy > 80) continue;
+      const d2 = (it.pos.x - o.x) ** 2 + (it.pos.z - o.z) ** 2;
+      if (d2 < bd) { bd = d2; best = it; }
+    }
+    if (!best) return false;
+    this.task = 'pickup';
+    this.setGoal('pickup', best.pos, { radius: 10 });
+    return true;
   }
 
   /** Point the bot at a destination. Repaths only when it actually changed. */

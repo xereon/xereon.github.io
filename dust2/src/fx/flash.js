@@ -53,30 +53,6 @@ export class Flash {
 
   detonate(pos) {
     const fx = this.fx, R = fx.rand, S = fx.pool.spec, now = fx.now;
-    // visuals
-    S.reset(); S.pos.copy(pos);
-    S.life = 0.22; S.size0 = 70; S.size1 = 140;
-    S.c0.set(30, 30, 32, 1); S.c1.set(10, 10, 12, 0);
-    S.sprite = SPR.GLOW; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.15;
-    fx.pool.emit(S, now);
-    S.reset(); S.pos.copy(pos);
-    S.life = 0.12; S.size0 = 55; S.size1 = 75; S.rot = R() * 6.283;
-    S.c0.set(40, 40, 44, 1); S.c1.set(20, 20, 24, 0);
-    S.sprite = SPR.FLARE; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.3;
-    fx.pool.emit(S, now);
-    sparks(fx, pos, _up, Math.round(16 * fx.scale), 500, -1e6, { life: 0.35, size: 0.25, hot: 1.4, spread: 2 });
-    for (let i = 0; i < 4; i++) {
-      S.reset(); S.pos.copy(pos);
-      S.vel.set((R() - 0.5) * 60, 10 + R() * 30, (R() - 0.5) * 60);
-      S.drag = 2.5; S.gravity = -0.03; S.life = 1.6 + R();
-      S.size0 = 3; S.size1 = 16 + R() * 8; S.rot = R() * 6.283;
-      S.c0.set(0.75, 0.75, 0.75, 0.35); S.c1.set(0.75, 0.75, 0.75, 0);
-      S.sprite = SPR.SMOKE0 + 3; S.frames = 12; S.flags = PF.LIT | PF.SOFT | PF.TURB;
-      fx.pool.emit(S, now);
-    }
-    _to.copy(pos);
-    fx.lights.spawn(now, _to, 0xeef2ff, 6e6, 2200, 0.3, { prio: 3, hold: 0.05 });
-
     // blindness
     const col = World.collision;
     for (const ent of World.entities) {
@@ -110,10 +86,33 @@ export class Flash {
       this.ev.ent = ent; this.ev.amount = st.peak; this.ev.duration = hold + fade; this.ev.pos = pos;
       World.emit('flashed', this.ev);
       if (ent === World.local && st.peak > 0.6 && hold + fade > 1.0) {
-        this.captureAt = now;
         this.localStart = now;
+        this.capture();       // the frame as it was, before the burst itself
       }
     }
+    // visuals
+    S.reset(); S.pos.copy(pos);
+    S.life = 0.2; S.size0 = 40; S.size1 = 75;
+    S.c0.set(10, 10, 11, 1); S.c1.set(3, 3, 3.5, 0);
+    S.sprite = SPR.GLOW; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.15;
+    fx.pool.emit(S, now);
+    S.reset(); S.pos.copy(pos);
+    S.life = 0.12; S.size0 = 34; S.size1 = 48; S.rot = R() * 6.283;
+    S.c0.set(18, 18, 20, 1); S.c1.set(8, 8, 9, 0);
+    S.sprite = SPR.FLARE; S.flags = PF.ADD; S.fadeIn = 0; S.fadeOut = 0.3;
+    fx.pool.emit(S, now);
+    sparks(fx, pos, _up, Math.round(16 * fx.scale), 500, -1e6, { life: 0.35, size: 0.25, hot: 1.4, spread: 2 });
+    for (let i = 0; i < 4; i++) {
+      S.reset(); S.pos.copy(pos);
+      S.vel.set((R() - 0.5) * 60, 10 + R() * 30, (R() - 0.5) * 60);
+      S.drag = 2.5; S.gravity = -0.03; S.life = 1.6 + R();
+      S.size0 = 3; S.size1 = 16 + R() * 8; S.rot = R() * 6.283;
+      S.c0.set(0.75, 0.75, 0.75, 0.35); S.c1.set(0.75, 0.75, 0.75, 0);
+      S.sprite = SPR.SMOKE0 + 3; S.frames = 12; S.flags = PF.LIT | PF.SOFT | PF.TURB;
+      fx.pool.emit(S, now);
+    }
+    _to.copy(pos);
+    fx.lights.spawn(now, _to, 0xeef2ff, 6e5, 1800, 0.3, { prio: 3, hold: 0.04 });
   }
 
   amountAt(st, now) {

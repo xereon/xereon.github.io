@@ -137,7 +137,7 @@ function window_(K, w, [px, py], ux, uy, mx, my, z, ww, wh, yaw, shutters, r, ba
   const P = (s, zz, off) => [px + ux * s + mx * off, py + uy * s + my * off, zz];
   // dark pane just proud of the wall, facing the street
   const pane = [P(-hw, z, o), P(hw, z, o), P(hw, z + wh, o), P(-hw, z + wh, o)];
-  K.poly('glass', faceToward(pane, mx, my), { col: 0.22 });
+  K.poly('window_frame', faceToward(pane, mx, my), { col: 0.1 });
   // frame
   const fr = 3, fo = 2.2;
   K.slab(P(-hw - fr, z, fo / 2).slice(0, 2), P(hw + fr, z, fo / 2).slice(0, 2), z + wh, z + wh + fr, fo, 'window_frame', { col: false, color: 0.8 });

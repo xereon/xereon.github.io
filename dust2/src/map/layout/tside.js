@@ -24,6 +24,14 @@ export function build(K) {
     { base: { h: 6, out: 10, mat: 'concrete_floor', alt: { len: 56, mats: ['plaster_wall#red', 'plaster_wall#white'] } }, mat: 'concrete_floor', top: 380, tops: { 1: 330, 2: 300, 3: 300 }, paint: teal, cornice: {} });
   K.region('road_flat', zc([[30, -1180], [194, -1180], [194, -1015], [463, -1015], [463, -620], [388, -620], [30, -620]], 0),
     { base: { h: 6, out: 10, mat: 'concrete_floor', alt: { len: 56, mats: ['plaster_wall#red', 'plaster_wall#white'] } }, mat: 'concrete_floor', top: 300, paint: teal, cornice: {} });
+  // the road carries on east past a fenced gate (out of bounds, seen from T spawn)
+  K.region('road_beyond', zc([[463, -960], [1060, -960], [1060, -700], [463, -700]], 0),
+    { base: { h: 6, out: 10, mat: 'concrete_floor', alt: { len: 56, mats: ['plaster_wall#red', 'plaster_wall#white'] } }, mat: 'concrete_floor', top: 280, paint: teal, cornice: {}, nav: false });
+  K.clip([458, -962, -20], [476, -698, 420]);
+  for (const y of [-960, -830, -700]) K.box([460, y - 3, 0], [466, y + 3, 124], 'metal_beam', { col: false, color: 0.7 });
+  K.slab([463, -957], [463, -833], 0, 120, 2, 'metal_grate', { col: false });
+  K.slab([463, -827], [463, -703], 0, 120, 2, 'metal_grate', { col: false });
+  K.box([460, -960, 118], [466, -700, 124], 'metal_beam', { col: false, color: 0.7 });
   // wall along the suicide ledge: flush with the plateau at its west end (the drop Ts take into
   // the alley), rising above the sloping road further east as a parapet
   const zr = (x) => 124 * (30 - x) / 550;

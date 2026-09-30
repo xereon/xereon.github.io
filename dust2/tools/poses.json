@@ -21,12 +21,12 @@
  },
  "outside_long": {
   "eye": [
-   560,
+   330,
    64,
-   330
+   300
   ],
   "pitch": 1,
-  "yaw": 88,
+  "yaw": 62,
   "desc": "Outside long looking north up the street to the long doors"
  },
  "long_doors": {

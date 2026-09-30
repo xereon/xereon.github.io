@@ -115,7 +115,7 @@ export class FireVolume {
       fx.decals.add(_p, up, 'burn', 70 + rand() * 40, rand() * 6.283, 'sand', 0.8, 0);
     }
     _p.copy(this.center).setY(this.center.y + 40);
-    this.light = fx.lights.spawn(now, _p, 0xff8a3a, 2.4e5, 700, FIRE.LIFE + 0.5, { prio: 2, flicker: 0.45, attack: 0.25, hold: FIRE.LIFE - 1.2, owner: this });
+    this.light = fx.lights.spawn(now, _p, 0xff7a30, 2.2e4, 620, FIRE.LIFE + 0.5, { prio: 2, flicker: 0.45, attack: 0.25, hold: FIRE.LIFE - 1.2, owner: this });
     return this;
   }
 
@@ -148,7 +148,7 @@ export class FireVolume {
     if (!this.active) return;
     if (now > this.tEnd + 0.1) { this.active = false; this.sys.fx.lights.release(this); return; }
     const fx = this.sys.fx, S = fx.pool.spec, R = this.rand, pool = fx.pool;
-    const rate = 0.085 / Math.max(0.35, fx.scale);
+    const rate = 0.11 / Math.max(0.35, fx.scale);
     for (let i = 0; i < this.n; i++) {
       if (!this.cellBurning(i, now)) continue;
       this.acc[i] += dt;
@@ -165,7 +165,7 @@ export class FireVolume {
         S.life = 0.5 + R() * 0.45;
         S.size0 = sz; S.size1 = sz * (1.15 + R() * 0.3);
         S.rot = (R() - 0.5) * 0.35;
-        S.c0.set(0.85 + R() * 0.25, 2.6 * intensity, 0, 1); S.c1.set(0.75, 1.8 * intensity, 0, 1);
+        S.c0.set(0.8 + R() * 0.25, 1.05 * intensity, 0, 0.95); S.c1.set(0.65, 0.7 * intensity, 0, 0.9);
         S.sprite = SPR.FIRE0; S.frames = 16;
         S.flags = PF.FIRE | PF.ADD | PF.SOFT;
         S.fadeIn = 0.06; S.fadeOut = 0.6; S.floorY = this.cells[o + 1] - 2;

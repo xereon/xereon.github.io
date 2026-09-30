@@ -30,8 +30,8 @@ function dustPuffs(fx, P, N, col, count, big, floorY, sun) {
     S.size0 = 3 + R() * 3;
     S.size1 = (14 + R() * 14) * (0.7 + 0.5 * big);
     S.rot = R() * 6.283; S.rotVel = (R() - 0.5) * 0.8;
-    S.c0.set(col.r, col.g, col.b, 0.42 + R() * 0.2);
-    S.c1.set(col.r, col.g, col.b, 0.22);
+    S.c0.set(col.r, col.g, col.b, 0.55 + R() * 0.2);
+    S.c1.set(col.r, col.g, col.b, 0.25);
     S.sprite = SPR.SMOKE0 + 5; S.frames = 11;
     S.flags = PF.LIT | PF.SOFT | PF.TURB;
     S.fadeIn = 0.03; S.fadeOut = 0.2;
@@ -133,15 +133,15 @@ export function impactFx(fx, point, normal, surface) {
     dustPuffs(fx, P, N, _c, Math.round((2 + 2 * amt) * k), 1.3, floorY, sun);
     // sand spray: streaks thrown up that fall back
     const S = fx.pool.spec;
-    for (let i = 0; i < Math.round(5 * k); i++) {
+    for (let i = 0; i < Math.round(8 * k); i++) {
       S.reset();
       S.pos.copy(P).addScaledVector(N, 1);
       randCone(N, 0.35, R, _d);
       S.vel.copy(_d).multiplyScalar(180 + R() * 220);
       S.gravity = 0.9; S.drag = 1.6;
       S.life = 0.6 + R() * 0.5;
-      S.size0 = 1.5; S.size1 = 6 + R() * 4;
-      S.c0.set(_c.r * 0.9, _c.g * 0.9, _c.b * 0.9, 0.8); S.c1.set(_c.r, _c.g, _c.b, 0);
+      S.size0 = 2.5; S.size1 = 10 + R() * 6;
+      S.c0.set(_c.r * 0.9, _c.g * 0.9, _c.b * 0.9, 0.9); S.c1.set(_c.r, _c.g, _c.b, 0);
       S.sprite = R() < 0.5 ? SPR.STREAK : SPR.GRAINS;
       S.flags = PF.LIT | PF.STRETCH | PF.SOFT;
       S.stretch = 0.02;
@@ -150,7 +150,7 @@ export function impactFx(fx, point, normal, surface) {
     }
     chips(fx, P, N, _c, Math.round(4 * k), floorY, sun, SPR.CHIP0 + 3, 1, 0.15, 0.3, 260);
   } else if (METAL[surface]) {
-    sparks(fx, P, N, Math.round((10 + R() * 8) * k), 600, floorY);
+    sparks(fx, P, N, Math.round((16 + R() * 10) * k), 650, floorY, { size: 0.4 });
     glint(fx, P, N, 3.5 + R() * 1.5, 7, 5, 2.4, 0.05);
     dustPuffs(fx, P, N, _c.setRGB(0.35, 0.35, 0.35), Math.round(2 * k), 0.5, floorY, sun);
   } else if (WOOD[surface]) {
@@ -226,9 +226,9 @@ export function bloodFx(fx, point, dir, amount = 1) {
     S.vel.copy(_r).multiplyScalar(40 + R() * 90);
     S.drag = 5; S.gravity = 0.06;
     S.life = 0.4 + R() * 0.45;
-    S.size0 = 2 + R(); S.size1 = (7 + R() * 7) * (0.7 + 0.3 * amount);
+    S.size0 = 2.5 + R(); S.size1 = (9 + R() * 8) * (0.7 + 0.3 * amount); S.sizePow = 4;
     S.rot = R() * 6.283; S.rotVel = (R() - 0.5) * 2;
-    S.c0.set(0.32, 0.015, 0.012, 0.85); S.c1.set(0.22, 0.01, 0.008, 0.2);
+    S.c0.set(0.3, 0.012, 0.01, 0.95); S.c1.set(0.2, 0.008, 0.006, 0.3);
     S.sprite = SPR.MIST0 + ((R() * 2) | 0);
     S.flags = PF.LIT | PF.SOFT;
     S.fadeIn = 0; S.fadeOut = 0.35; S.sun = sun; S.floorY = floorY;

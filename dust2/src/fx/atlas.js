@@ -542,7 +542,7 @@ void main() {
   bool metal = k == 6 || k == 7;
   if (uOut == 0) {
     vec3 col = vec3(raw.b);
-    if (blood) col = mix(vec3(0.16, 0.008, 0.006), vec3(0.34, 0.02, 0.012), raw.b);
+    if (blood) col = mix(vec3(0.075, 0.004, 0.003), vec3(0.19, 0.012, 0.008), raw.b);
     else if (scorch) col = vec3(raw.b * 1.05, raw.b, raw.b * 0.92);
     else if (metal) col = mix(vec3(raw.b * 0.9), vec3(0.62, 0.62, 0.64), raw.a);
     gl_FragColor = vec4(col, raw.r);

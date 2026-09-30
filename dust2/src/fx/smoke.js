@@ -17,9 +17,9 @@ import { queueRange } from './util.js';
 
 export const SMOKE = {
   CELL: 20, GX: 48, GY: 18, GZ: 48,
-  BUDGET: 760,          // voxels (~ volume of a 150u-radius dome)
+  BUDGET: 900,          // voxels (~ volume of a 155u-radius dome)
   MAXDIST: 330,         // path length cap (corridors)
-  HEIGHT: 150,          // max height above the detonation ground
+  HEIGHT: 175,          // max height above the detonation ground
   HOLD: 15.2,           // seconds until dissipation starts
   LIFE: 18.2,
   PER: 160,             // max billboards per volume
@@ -134,7 +134,7 @@ export class SmokeVolume {
     return (col.pointContents(_d) & MASK_VISIBLE) !== 0;
   }
   metric(ax, ay, az, bx, by, bz) {
-    const dx = ax - bx, dy = (ay - by) * 1.25, dz = az - bz;
+    const dx = ax - bx, dy = (ay - by) * 1.05, dz = az - bz;
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
   revealT(d) { return this.t0 + 0.06 + 1.05 * Math.pow(d / 200, 1.15); }
@@ -221,11 +221,11 @@ export class SmokeVolume {
       this.cellCenter(c, _a);
       // optical depth toward the sun
       let tau = 0;
-      for (let s = 1; s <= 10; s++) {
-        _b.copy(_a).addScaledVector(sunDirW, s * CELL);
+      for (let s = 0; s < 10; s++) {
+        _b.copy(_a).addScaledVector(sunDirW, (s + 1.5) * CELL);
         if (this.filledAt(_b)) tau += 1;
       }
-      let sun = Math.exp(-tau * 0.5);
+      let sun = Math.exp(-tau * 0.4);
       if (col) {
         _b.copy(_a).addScaledVector(sunDirW, 3000);
         if (col.rayTrace(_a, _b, MASK_VISIBLE).fraction < 1) sun *= 0.1;
@@ -300,7 +300,7 @@ export class SmokeVolume {
     for (let s = s0 + step * 0.5; s < s1; s += step) {
       _c.copy(a).addScaledVector(_a, s);
       const c = this.cellAt(_c);
-      if (c >= 0 && this.state[c] === 2) tau += this.cellDensity(c, t) * step;
+      if (c >= 0 && this.state[c] === 2) tau += this.cellDensity(c, t) * this.sys.carveFactor(_c, t) * step;
     }
     return tau / SMOKE.MFP;
   }
@@ -339,11 +339,15 @@ export class SmokeSystem {
     this.geo = g;
     this.blasts = [new THREE.Vector4(0, 0, 0, -99), new THREE.Vector4(0, 0, 0, -99), new THREE.Vector4(0, 0, 0, -99), new THREE.Vector4(0, 0, 0, -99)];
     this.blastHead = 0;
+    this.cutA = []; this.cutB = [];
+    for (let i = 0; i < 8; i++) { this.cutA.push(new THREE.Vector4(0, 0, 0, -99)); this.cutB.push(new THREE.Vector4()); }
+    this.cutHead = 0;
     const size = atlas?.image?.width || 2048;
     this.uniforms = {
       uTime: shared.uTime,
       uAtlas: { value: atlas }, uAtlasTexel: { value: 1 / size },
       uBlast: { value: this.blasts },
+      uCutA: { value: this.cutA }, uCutB: { value: this.cutB },
       uCamWorld: { value: new THREE.Matrix4() },
       uSunDirV: { value: new THREE.Vector3() },
       uSunCol: shared.uSunCol, uSkyCol: shared.uSkyCol, uGroundCol: shared.uGroundCol,
@@ -428,6 +432,43 @@ export class SmokeSystem {
     const b = this.blasts[this.blastHead];
     this.blastHead = (this.blastHead + 1) % 4;
     b.set(pos.x, pos.y, pos.z, now);
+  }
+  /** A bullet passed from a to b: carve a tunnel if it crosses any smoke. */
+  cut(a, b, now) {
+    let hit = false;
+    for (const v of this.vols) {
+      if (!v.active || now < v.t0 + 0.3) continue;
+      // segment vs bounding sphere
+      _a.subVectors(b, a);
+      const L2 = _a.lengthSq();
+      const t = L2 > 0 ? Math.max(0, Math.min(1, _b.subVectors(v.pos, a).dot(_a) / L2)) : 0;
+      _c.copy(a).addScaledVector(_a, t);
+      if (_c.distanceToSquared(v.pos) < (v.radius + 20) * (v.radius + 20)) { hit = true; break; }
+    }
+    if (!hit) return false;
+    const i = this.cutHead;
+    this.cutHead = (i + 1) % 8;
+    this.cutA[i].set(a.x, a.y, a.z, now);
+    this.cutB[i].set(b.x, b.y, b.z, 0);
+    return true;
+  }
+  carveFactor(p, t) {
+    let k = 1;
+    for (let i = 0; i < 8; i++) {
+      const A = this.cutA[i], B = this.cutB[i];
+      const age = t - A.w;
+      if (age < 0 || age > 2.2) continue;
+      const abx = B.x - A.x, aby = B.y - A.y, abz = B.z - A.z;
+      const L2 = abx * abx + aby * aby + abz * abz;
+      let u = L2 > 0 ? ((p.x - A.x) * abx + (p.y - A.y) * aby + (p.z - A.z) * abz) / L2 : 0;
+      u = Math.max(0, Math.min(1, u));
+      const dx = A.x + abx * u - p.x, dy = A.y + aby * u - p.y, dz = A.z + abz * u - p.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const r = 7 + 16 * smooth(0, 0.25, age);
+      const open = 1 - smooth(0.35, 2.2, age);
+      k *= 1 - open * (1 - smooth(r * 0.45, r, d));
+    }
+    return k;
   }
   blastFactor(p, t) {
     let f = 1;

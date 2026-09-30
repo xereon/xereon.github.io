@@ -31,7 +31,7 @@ attribute vec4 a3; // gravity scale, drag, floorY, restitution (FIREBALL: heat f
 attribute vec4 a4; // color0 rgba
 attribute vec4 a5; // color1 rgba
 attribute vec4 a6; // sprite, frames, flags, stretch
-attribute vec4 a7; // fadeIn, fadeOutStart, sunVis, seed
+attribute vec4 a7; // fadeIn, fadeOutStart, sunVis, sizePow (int) + seed (fract)
 uniform float uTime;
 uniform vec2 uViewport;
 uniform float uAtlasTexel;
@@ -105,12 +105,12 @@ void main() {
       vel = vel + vec3(0.0, -g * age, 0.0);
     }
     if ((flags & F_TURB) != 0) {
-      float sd = a7.w * 6.2831;
+      float sd = fract(a7.w) * 6.2831;
       vec3 tb = vec3(sin(age * 1.3 + sd), 0.5 * sin(age * 0.9 + sd * 1.7), cos(age * 1.1 + sd * 2.3));
       pos += tb * max(a2.x, a2.y) * 0.22 * min(age, 1.5);
     }
   }
-  float size = mix(a2.x, a2.y, 1.0 - (1.0 - x) * (1.0 - x));
+  float size = mix(a2.x, a2.y, 1.0 - pow(1.0 - x, max(floor(a7.w), 1.0)));
   float rot = a2.z + a2.w * age;
   vec4 col = mix(a4, a5, x);
   float fade = smoothstep(0.0, max(a7.x, 1e-4), x) * (1.0 - smoothstep(a7.y, 1.0, x));
@@ -243,6 +243,7 @@ void main() {
     float T = clamp(t.a * vColor.r, 0.0, 1.0);
     col = fireRamp(T) * uEmissive * vColor.g;
     a = t.r * vColor.a * smoothstep(0.02, 0.25, T);
+    addMix = 0.55 + 0.45 * T;
   } else {
     vec3 n = vec3(t.g * 2.0 - 1.0, t.b * 2.0 - 1.0, 0.0) * 0.7;
     n.z = sqrt(max(0.0, 1.0 - dot(n.xy, n.xy)));

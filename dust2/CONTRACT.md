@@ -119,6 +119,21 @@ Canonical events:
 | `round_start` / `round_end` | `{ round, winner?, reason? }` |
 | `bomb_planted` / `bomb_defused` / `bomb_exploded` | `{ site, ent? }` |
 | `buy` | `{ ent, item }` |
+| `freeze_end` | `{ round }` |
+| `round_mvp` | `{ ent, reason }` |
+| `reload` | `{ ent, weapon, time, empty, count }` |
+| `weapon_shell_in` | `{ ent, weapon }` (shotgun shell-by-shell) |
+| `jump` / `land` | `{ ent, surface, volume, fallSpeed }` |
+| `grenade_bounce` | `{ pos, key, surface }` |
+| `grenade_detonate` / `grenade_expire` | `{ pos, key, ent }` |
+| `decoy_fire` | `{ pos, weapon }` |
+| `bomb_beep` | `{ pos, timeLeft }` |
+| `shell_land` | `{ pos, key, surface }` |
+| `radio` | `{ ent, msg }` |
+| `sound` | `{ name, pos? }` — generic one-shot for anything without a dedicated event |
+
+`footstep` may also carry `kind` (`'step' | 'ladder' | 'wade'`). `World.map.soundEmitters`
+(optional) is an array of `{ name, pos, radius }` for looping ambience the audio module places.
 
 ---
 

@@ -30,7 +30,14 @@ export function testWorld() {
   // a 64u box and a 40u box in open ground
   cw.addBox(V(-700, 0, 700), V(-600, 64, 1000));                          // 64 tall wall-like box
   cw.addBox(V(-400, 0, 900), V(-340, 40, 960));                           // 40 tall box
-  // a 200u tall ledge (only reachable by stairs? no — only via drop from platform A top? no)
+  // thin-wall case (Dust II A ramp): a platform at 96 behind a 20u-thick wall 128 tall, with a
+  // ramp beside the wall rising to 112. The wall top is standable but a tightrope; the real way
+  // onto the platform is a ramp round the far side.
+  cw.addBox(V(-1150, 0, -1150), V(-996, 96, -850));                        // platform C
+  cw.addBox(V(-996, 0, -1150), V(-970, 128, -850));                        // thin wall (26u, on a grid column)
+  cw.addWedge(V(-970, 0, -1100), V(-850, 112, -850), 'z', -1);             // side ramp up to 112
+  cw.addBox(V(-970, 0, -1150), V(-850, 112, -1100));                       // ramp top landing
+  cw.addWedge(V(-1150, 0, -850), V(-996, 96, -700), 'z', -1);              // access ramp onto C
   cw.build();
   const zone = (a, b, name) => ({ min: V(...a), max: V(...b), name });
   return {
@@ -124,6 +131,18 @@ console.log(`baked ${nav.count} nodes, ${nav.linkTo.length} links in ${ms.toFixe
   ok(bad === 0, `no nodes inside/against walls (${bad})`);
   ok(nav.areaOf(V(-600, 0, -600)) === 'corridor', `areaOf corridor = ${nav.areaOf(V(-600, 0, -600))}`);
   ok(nav.areaOf(V(550, 128, -500)) === 'platA', `areaOf platform = ${nav.areaOf(V(550, 128, -500))}`);
+}
+// 7b. thin wall: path from the side ramp onto platform C goes round, never along the wall top
+{
+  const p = nav.findPath(V(-915, 0, -820), V(-1075, 96, -1000));
+  ok(!!p, 'path onto platform C exists');
+  const nodes = nav.lastPathNodes;
+  const onWall = nodes.filter((n) => nav.py[n] > 118 && nav.px[n] > -1012 && nav.px[n] < -954 && nav.pz[n] > -1090).length;
+  ok(onWall === 0, `path avoids the thin wall top (${onWall} wall nodes)`);
+  let ridge = 0, top = 0;
+  for (let i = 0; i < nav.count; i++) if (nav.py[i] > 118 && nav.px[i] > -1012 && nav.px[i] < -954 && nav.pz[i] > -1090) { top++; if (nav.ridge[i] || nav.overhang[i]) ridge++; }
+  ok(top > 0, `wall top is sampled (${top} nodes)`);
+  ok(ridge >= top * 0.9, `wall-top nodes flagged ridge/overhang (${ridge}/${top})`);
 }
 // 8. perf: many random paths
 {

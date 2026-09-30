@@ -26,7 +26,7 @@ export class PSpec {
     this.gravity = 0; this.drag = 0; this.floorY = -1e6; this.restitution = 0.3;
     this.c0.set(1, 1, 1, 1); this.c1.set(1, 1, 1, 0);
     this.sprite = 0; this.frames = 1; this.flags = 0; this.stretch = 0;
-    this.fadeIn = 0.05; this.fadeOut = 0.6; this.sun = 1; this.seed = 0;
+    this.fadeIn = 0.05; this.fadeOut = 0.6; this.sun = 1; this.seed = 0; this.sizePow = 2;
     return this;
   }
   color(r, g, b, a = 1) { this.c0.set(r, g, b, a); this.c1.set(r, g, b, 0); return this; }
@@ -107,7 +107,8 @@ export class ParticlePool {
     d[o + 16] = s.c0.x; d[o + 17] = s.c0.y; d[o + 18] = s.c0.z; d[o + 19] = s.c0.w;
     d[o + 20] = s.c1.x; d[o + 21] = s.c1.y; d[o + 22] = s.c1.z; d[o + 23] = s.c1.w;
     d[o + 24] = s.sprite; d[o + 25] = s.frames; d[o + 26] = s.flags; d[o + 27] = s.stretch;
-    d[o + 28] = s.fadeIn; d[o + 29] = s.fadeOut; d[o + 30] = s.sun; d[o + 31] = s.seed;
+    d[o + 28] = s.fadeIn; d[o + 29] = s.fadeOut; d[o + 30] = s.sun;
+    d[o + 31] = Math.max(1, Math.min(12, Math.round(s.sizePow))) + (s.seed - Math.floor(s.seed)) * 0.998;
     if (i < this.dmin) this.dmin = i;
     if (i > this.dmax) this.dmax = i;
     return i;

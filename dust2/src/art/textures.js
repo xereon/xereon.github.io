@@ -254,7 +254,7 @@ function createMaterial(key, o) {
   if (def) {
     const world = o.world ? (o.world === 1 ? def.world : o.world) * (o.scale ?? 1) : 0;
     installPatch(m, {
-      antiTile: o.antiTile ?? !!def.antiTile,
+      antiTile: (o.antiTile ?? !!def.antiTile) && World.quality !== 'low',   // 2 extra taps/map
       macro: o.macro != null ? [o.macro, o.macro * 0.4] : def.macro,
       macroScale: def.macroScale,
       blendDepth: def.blendDepth,

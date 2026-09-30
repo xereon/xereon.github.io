@@ -43,7 +43,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
   const P = _P, D = _D;
   if (view) { worldToView(worldPos, P); dirWorldToView(dir, D).normalize(); }
   else { P.copy(worldPos); D.copy(dir).normalize(); }
-  const s = M.scale * (opts.scale ?? 1) * (view ? fx.cvar('fx_muzzle_view_scale', 1) : 1);
+  const s = M.scale * (opts.scale ?? 1) * (view ? fx.cvar('fx_muzzle_view_scale', 0.75) : 1);
   const bright = fx.cvar('fx_muzzle_bright', 1);
   const S = pool.spec;
   const life = 0.034 + R() * 0.02;
@@ -52,9 +52,9 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
   S.reset();
   S.pos.copy(P).addScaledVector(D, 1.5 * s);
   S.life = life * 1.3;
-  S.size0 = 6 * s * M.glow; S.size1 = 7.5 * s * M.glow;
+  S.size0 = 4.5 * s * M.glow; S.size1 = 5.5 * s * M.glow;
   S.rot = R() * 6.283;
-  S.c0.set(7 * bright, 4.2 * bright, 1.8 * bright, 1); S.c1.set(5 * bright, 2.4 * bright, 0.8 * bright, 0);
+  S.c0.set(3.2 * bright, 1.9 * bright, 0.7 * bright, 1); S.c1.set(2 * bright, 0.9 * bright, 0.25 * bright, 0);
   S.sprite = SPR.GLOW; S.flags = PF.ADD;
   S.fadeIn = 0; S.fadeOut = 0.35;
   pool.emit(S, now);
@@ -66,7 +66,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
     S.life = life;
     S.size0 = (4.2 + R() * 1.6) * s; S.size1 = S.size0 * 1.25;
     S.rot = R() * 6.283;
-    S.c0.set(10 * bright, 7 * bright, 3.6 * bright, 1); S.c1.set(8 * bright, 4 * bright, 1.2 * bright, 0.2);
+    S.c0.set(7 * bright, 4.2 * bright, 1.5 * bright, 1); S.c1.set(5 * bright, 2.2 * bright, 0.5 * bright, 0.3);
     S.sprite = M.star === 1 ? SPR.SHOTGUN : SPR.STAR0 + ((R() * 4) | 0);
     S.flags = PF.ADD;
     S.fadeIn = 0; S.fadeOut = 0.5;
@@ -82,7 +82,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
       S.size0 = (1.3 + R() * 0.9) * s; S.size1 = S.size0 * 1.2;
       S.stretch = M.prongLen * (0.9 + R() * 1.2) * 2.4;
       S.rot = R() < 0.5 ? 1 : -1;
-      S.c0.set(8 * bright, 5 * bright, 2.2 * bright, 1); S.c1.set(6 * bright, 2.6 * bright, 0.7 * bright, 0.3);
+      S.c0.set(4.5 * bright, 2.2 * bright, 0.6 * bright, 1); S.c1.set(3 * bright, 1.1 * bright, 0.2 * bright, 0.4);
       S.sprite = SPR.PRONG0 + ((R() * 2) | 0);
       S.flags = PF.ADD | PF.AXIS;
       S.fadeIn = 0; S.fadeOut = 0.5;
@@ -96,7 +96,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
       S.life = life * 0.9;
       S.size0 = 2.4 * s * M.cone; S.size1 = S.size0 * 1.3;
       S.stretch = 5.5 + R() * 2;
-      S.c0.set(6 * bright, 3.6 * bright, 1.4 * bright, 1); S.c1.set(4 * bright, 1.8 * bright, 0.4 * bright, 0);
+      S.c0.set(3.5 * bright, 1.8 * bright, 0.5 * bright, 1); S.c1.set(2.2 * bright, 0.8 * bright, 0.15 * bright, 0);
       S.sprite = SPR.CONE; S.flags = PF.ADD | PF.AXIS;
       S.fadeIn = 0; S.fadeOut = 0.4;
       pool.emit(S, now);
@@ -141,9 +141,9 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
     S2.vel.y += 12 + R() * 10;
     S2.drag = 2.2; S2.gravity = -0.03;
     S2.life = 1.1 + R() * 1.2;
-    S2.size0 = 0.8 * M.scale; S2.size1 = (6 + R() * 5) * M.scale;
+    S2.size0 = 1.2 * M.scale; S2.size1 = (8 + R() * 7) * M.scale;
     S2.rot = R() * 6.283; S2.rotVel = (R() - 0.5) * 1.5;
-    const a = cls === 'suppressed' ? 0.3 : 0.18;
+    const a = cls === 'suppressed' ? 0.42 : 0.3;
     S2.c0.set(0.7, 0.7, 0.68, a); S2.c1.set(0.7, 0.7, 0.68, 0);
     S2.sprite = i === 0 ? SPR.WISP : SPR.SMOKE0 + 8; S2.frames = i === 0 ? 1 : 8;
     S2.flags = PF.LIT | PF.TURB | PF.NEARFADE;
@@ -154,7 +154,7 @@ export function muzzleFx(fx, worldPos, dir, key, opts = {}) {
   // light: world light at the (matched) world position; view light for the gun/hands
   if (M.light > 0 && fx.cvar('fx_muzzle_light', 1) > 0) {
     _t.copy(W).addScaledVector(Wd, 6);
-    fx.lights.spawn(now, _t, 0xffb060, 26000 * M.light * bright, 420 * Math.sqrt(M.light), 0.065, { prio: 0, owner: null });
+    fx.lights.spawn(now, _t, 0xffa050, 9000 * M.light * bright, 380 * Math.sqrt(M.light), 0.06, { prio: 0, owner: null });
     if (view) fx.flashViewLight(P, D, M.light * bright);
   }
 }

@@ -19,7 +19,8 @@ export function scope(b, h, o = {}) {
   if (b.detail) for (const [a, w, r] of [[u0 + 0.35, 0.8, oc * 1.02], [u1 - 1.3, 0.7, ob * 1.02]]) b.add('knurl', lathe([[r * 0.97, a], [r, a + 0.05], [r, a + w - 0.05], [r * 0.97, a + w]], 28));
   // lenses (coated glass) set slightly inside the bells
   b.add('lens', cyl(ob * 0.86, ob * 0.86, 0.04, 28, { u0: u1 - 0.25 }));
-  b.add('lens', cyl(oc * 0.72, oc * 0.72, 0.04, 24, { u0: u0 - 0.2 }));
+  b.add('lens', cyl(oc * 0.74, oc * 0.74, 0.04, 24, { u0: u0 + 0.35 }));
+  b.add('dark', lathe([[oc * 0.78, u0 + 0.34], [oc * 0.8, u0 - 0.3]], 24), {});   // inward-facing eyepiece bore
   b.add('dark', cyl(ob * 0.9, ob * 0.9, 0.3, 24, { u0: u1 - 0.6 }));
   // turret saddle + turrets (elevation top, windage right, parallax left)
   const tc = u0 + L * 0.42;
