@@ -13,28 +13,20 @@ export const NOISE_GLSL = /* glsl */`
 #define sat(x) clamp(x, 0.0, 1.0)
 uniform float uSeed;
 
-// lowbias32 integer hash (Wellons): 7 ops, good avalanche. Two 16-bit uniforms per call.
-uint ihash(uint x) {
-  x ^= x >> 16; x *= 0x7feb352du;
-  x ^= x >> 15; x *= 0x846ca68bu;
-  x ^= x >> 16;
-  return x;
+// Lattice randoms come from a 1024² RGBA32F table of uniform values (uRand) instead of
+// arithmetic hashing: a texelFetch is ~10x cheaper than an integer hash on software
+// rasterisers and just as fast on GPUs. Seeds pick a different offset into the table.
+// Lattice indices are already wrapped to their period, so periodicity is unaffected.
+uniform highp sampler2D uRand;
+vec4 rnd4(vec2 i, float s) {
+  int si = int(s) + int(uSeed) * 131;
+  ivec2 o = ivec2(si * 389 + (si >> 3) * 17, si * 631 + (si >> 5) * 13);
+  return texelFetch(uRand, (ivec2(floor(i)) + o) & 1023, 0);
 }
-uint latticeHash(vec2 i, float s) {
-  uvec2 u = uvec2(ivec2(i) + 8192);
-  return ihash(u.x ^ ihash(u.y ^ ihash(uint(s) * 747796405u + uint(uSeed) * 2891336453u)));
-}
-vec2 hash2(vec2 i, float s) {
-  uint h = latticeHash(i, s);
-  return vec2(float(h & 0xffffu), float(h >> 16)) * (1.0 / 65535.0);
-}
-float hash1(vec2 i, float s) { return float(latticeHash(i, s)) * (1.0 / 4294967295.0); }
-vec3 hash3(vec2 i, float s) {
-  uint h = latticeHash(i, s);
-  uint g = ihash(h);
-  return vec3(float(h & 0xffffu), float(h >> 16), float(g & 0xffffu)) * (1.0 / 65535.0);
-}
-float hashf(float i, float s) { return hash1(vec2(i, 17.0), s); }
+float hash1(vec2 i, float s) { return rnd4(i, s).x; }
+vec2 hash2(vec2 i, float s) { return rnd4(i, s).xy; }
+vec3 hash3(vec2 i, float s) { return rnd4(i, s).xyz; }
+float hashf(float i, float s) { return rnd4(vec2(i, 17.0), s).x; }
 
 vec2 fade2(vec2 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
 

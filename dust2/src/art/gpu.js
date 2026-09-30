@@ -109,6 +109,17 @@ export class Baker {
     this.maxAniso = renderer.capabilities?.getMaxAnisotropy?.() || 1;
     this.blank = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1);
     this.blank.needsUpdate = true;
+    // 1024² uniform random table for lattice hashing (see noise.js rnd4)
+    const N = 1024, rnd = new Float32Array(N * N * 4);
+    let x = 0x9e3779b9 >>> 0;
+    for (let i = 0; i < rnd.length; i++) {
+      x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+      rnd[i] = x / 4294967296;
+    }
+    this.rand = new THREE.DataTexture(rnd, N, N, THREE.RGBAFormat, THREE.FloatType);
+    this.rand.minFilter = this.rand.magFilter = THREE.NearestFilter;
+    this.rand.generateMipmaps = false;
+    this.rand.needsUpdate = true;
     this.final = new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3, vertexShader: VERT, fragmentShader: FINAL_FRAG,
       uniforms: {
@@ -131,6 +142,7 @@ export class Baker {
         uSeed: { value: def.seed || 1 },
         uCanvas: { value: canvasTex || this.blank },
         uLowA: { value: this.blank }, uLowB: { value: this.blank },
+        uRand: { value: this.rand },
       },
       depthTest: false, depthWrite: false,
     });
@@ -256,5 +268,6 @@ export class Baker {
     this.geo.dispose();
     this.final.dispose();
     this.blank.dispose();
+    this.rand.dispose();
   }
 }
