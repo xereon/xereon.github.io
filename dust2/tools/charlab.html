@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DUST II — character lab</title>
+  <style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}
+  #lbl{position:fixed;left:8px;top:6px;color:#fff;font:12px/1.3 monospace;text-shadow:0 1px 2px #000;white-space:pre}</style>
+  <script type="importmap">
+  { "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+  </script>
+</head>
+<body>
+<canvas id="c"></canvas><div id="lbl"></div>
+<script type="module">
+// Character lab: renders both agents under warm sun + sky light with ACES so the models can
+// be judged in isolation. ?view=lineup|action|closeup|ragdoll|hitbox|distance|turntable
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+import { defCvar } from '../src/core/cvars.js';
+import { CollisionWorld } from '../src/player/collision.js';
+
+const Q = new URLSearchParams(location.search);
+const view = Q.get('view') || 'lineup';
+const W = innerWidth, H = innerHeight;
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H, false);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = +(Q.get('exposure') || 1.0);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+World.scene = scene;
+// sky gradient environment (PMREM) so gloss/metal has something to reflect
+{
+  const envScene = new THREE.Scene();
+  const g = new THREE.SphereGeometry(100, 32, 16);
+  const cols = [];
+  const pos = g.attributes.position;
+  const top = new THREE.Color(0x5d8fd0), hor = new THREE.Color(0xd7e2ea), gnd = new THREE.Color(0x9c8260);
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 100;
+    const c = y > 0 ? hor.clone().lerp(top, Math.pow(y, 0.6)) : hor.clone().lerp(gnd, Math.min(1, -y * 4));
+    cols.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  envScene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(6, 8, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(40, 36, 30) }));
+  sunDisc.position.set(60, 70, 40); envScene.add(sunDisc);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(envScene, 0.02).texture;
+  scene.environmentIntensity = +(Q.get('env') || 0.55);
+  scene.background = new THREE.Color(0x9fb8d0);
+}
+const hemi = new THREE.HemisphereLight(0xb9d3f0, 0xa88a62, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0d8, 3.2);
+sun.position.set(300, 420, 180);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -220, right: 220, top: 220, bottom: -220, near: 10, far: 1400 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6;
+scene.add(sun);
+scene.add(sun.target);
+
+// ground + props
+const sandMat = new THREE.MeshStandardMaterial({ color: 0xc2a57a, roughness: 0.95 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), sandMat);
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const col = new CollisionWorld();
+col.addBox(new THREE.Vector3(-4000, -64, -4000), new THREE.Vector3(4000, 0, 4000), 'sand');
+World.collision = col;
+function block(min, max, color = 0xb59b73) {
+  const s = new THREE.Vector3().subVectors(max, min);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(s.x, s.y, s.z), new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));
+  m.position.copy(min).add(max).multiplyScalar(0.5); m.castShadow = m.receiveShadow = true; scene.add(m);
+  col.addBox(min, max, 'concrete');
+}
+
+const cam = new THREE.PerspectiveCamera(30, W / H, 1, 20000);
+World.camera = cam;
+const lbl = document.getElementById('lbl');
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+// ragdoll scenario: [team, x, z, yaw, impulse dir, force (Player.die scale), hitgroup]
+const RAG = [
+  ['T', -30, -30, 0, V(-1, 0.15, 0.1), 3.9, 1],
+  ['CT', -12, 30, 20, V(-1, 0.2, 0.3), 2.2, 2],
+  ['T', 40, -20, 90, V(0.6, 0.9, -0.2), 4, 0],
+  ['CT', 150, 20, 180, V(1, 0.1, 0.1), 1.5, 3],
+];
+
+// fake entity for posing
+function ent(o = {}) {
+  return Object.assign({
+    alive: true, team: 'T', origin: V(0, 0, 0), velocity: V(0, 0, 0), yaw: 0, pitch: 0,
+    onGround: true, ducking: false, duckAmount: 0, active: { def: { slot: 'primary' }, key: 'ak47' },
+  }, o);
+}
+
+async function main() {
+  const C = await import('../src/player/character.js');
+  if (!Q.has('fallbackgun')) {
+    const Wm = await import('../src/player/models/weapon.js');
+    await Wm.preloadWorldModels?.();
+  }
+  await C.characterReady?.('T'); await C.characterReady?.('CT');
+  const models = [];
+  const add = (team, e, label) => {
+    const m = C.createCharacterModel(team, 0);
+    e.team = team;
+    scene.add(m.root);
+    models.push({ m, e, label });
+    return m;
+  };
+  const t0 = performance.now();
+  let camPos, camTarget, fov = 30;
+  if (view === 'lineup' || view === 'hitbox') {
+    const yaws = [0, 40, 90, 180];
+    ['T', 'CT'].forEach((team, ti) => yaws.forEach((y, k) => {
+      const x = (ti * 4 + k - 3.5) * 46;
+      add(team, ent({ origin: V(x, 0, 0), yaw: -90 + y, pitch: 0, idle: true }), `${team} ${y}`);
+    }));
+    camPos = V(0, 42, 500); camTarget = V(0, 37, 0); fov = 25;
+  } else if (view === 'closeup') {
+    add('T', ent({ origin: V(-16, 0, 0), yaw: -60, idle: true }));
+    add('CT', ent({ origin: V(16, 0, 0), yaw: -120, idle: true }));
+    camPos = V(0, 58, 118); camTarget = V(0, 54, 0); fov = 32;
+  } else if (view === 'action') {
+    const poses = [
+      ['T', { velocity: V(0, 0, 0), duckAmount: 1, ducking: true }, 'crouch'],
+      ['T', { velocity: V(250, 0, 0), yaw: 0 }, 'run'],
+      ['T', { pitch: -60 }, 'aim up'],
+      ['T', { pitch: 55 }, 'aim down'],
+      ['CT', { active: { def: { slot: 'secondary' }, key: 'usp' } }, 'pistol'],
+      ['CT', { velocity: V(0, 0, -130), yaw: 0 }, 'walk strafe'],
+      ['CT', { active: { def: { slot: 'knife' }, key: 'knife' }, velocity: V(160, 0, 0) }, 'knife run'],
+      ['CT', { onGround: false, velocity: V(120, 150, 0) }, 'jump'],
+    ];
+    poses.forEach(([team, o, label], k) => {
+      const x = (k - 3.5) * 50, z = 0;
+      const e = ent({ origin: V(x, 0, z), yaw: -90 + 35, ...o, fixed: true });
+      if (o.yaw !== undefined) e.yaw = o.yaw;
+      add(team, e, label);
+    });
+    camPos = V(0, 70, 560); camTarget = V(0, 34, 0); fov = 25;
+  } else if (view === 'distance') {
+    add('T', ent({ origin: V(-60, 0, -2000), yaw: -90 - 20 }));
+    add('CT', ent({ origin: V(60, 0, -2000), yaw: -90 + 20 }));
+    camPos = V(0, 64, 0); camTarget = V(0, 40, -2000); fov = 90;
+  } else if (view === 'ragdoll') {
+    // stairs up to a platform with a crate; victims are shot off the edge / thrown by HE
+    for (let k = 0; k < 5; k++) block(V(-120 + k * 16, 0, -80), V(-104 + k * 16, 8 + k * 8, 80));
+    block(V(-40, 0, -80), V(220, 40, 80));
+    block(V(60, 40, -40), V(110, 72, 10), 0x8a6a45);
+    for (const [team, x, z, yaw] of RAG) add(team, ent({ origin: V(x, 40, z), yaw }));
+    camPos = V(-60, 190, 330); camTarget = V(-10, 30, 0); fov = 40;
+  } else if (view === 'turntable') {
+    const n = 6;
+    for (let k = 0; k < n; k++) add(Q.get('team') || 'CT', ent({ origin: V((k - (n - 1) / 2) * 40, 0, 0), yaw: -90 + k * 60, idle: true }));
+    camPos = V(0, 45, 560); camTarget = V(0, 38, 0); fov = 28;
+  }
+  if (Q.get('cam')) { const c = Q.get('cam').split(',').map(Number); camPos = V(c[0], c[1], c[2]); camTarget = V(c[3], c[4], c[5]); fov = c[6] || fov; }
+  cam.fov = fov; cam.position.copy(camPos); cam.lookAt(camTarget); cam.updateProjectionMatrix();
+  sun.target.position.copy(camTarget); sun.position.copy(camTarget).add(V(300, 420, 180));
+  const buildMs = performance.now() - t0;
+  col.build?.();
+
+  // animate a little so procedural poses settle
+  const dt = 1 / 60;
+  const steps = +(Q.get('steps') || 40);
+  for (let s = 0; s < steps; s++) {
+    World.time += dt;
+    for (const { m, e } of models) {
+      if (!e.fixed) e.origin.addScaledVector(e.velocity, e.onGround ? dt : 0);
+      m.update(e, dt);
+    }
+  }
+  if (view === 'ragdoll') {
+    models.forEach(({ m, e }, k) => { const [, , , , dir, force, hg] = RAG[k]; e.alive = false; m.ragdoll(dir.clone().normalize(), force, hg); });
+    for (let s = 0; s < 240; s++) { World.time += dt; for (const { m, e } of models) m.update(e, dt); }
+  }
+  if (view === 'hitbox') {
+    const H = await import('../src/player/hitboxes.js');
+    for (const { m, e } of models) {
+      const hb = m.worldHitboxes(e);
+      if (H.debugDrawHitboxes) H.debugDrawHitboxes(scene, hb);
+      m.root.traverse((o) => { if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; } });
+    }
+  }
+  const info = C.characterAssets?.('T');
+  const infoCT = C.characterAssets?.('CT');
+  renderer.render(scene, cam);
+  const ri = renderer.info.render;
+  lbl.textContent = `view=${view}  build ${buildMs.toFixed(0)}ms  calls ${ri.calls} tris ${ri.triangles}  T ${info?.tris?.join('/')} CT ${infoCT?.tris?.join('/')}`;
+  if (Q.has('nolabel')) lbl.textContent = '';
+  window.__READY = true;
+}
+main().catch((e) => { console.error(e); window.__BOOT_ERROR = String(e.stack || e); });
+</script>
+</body>
+</html>

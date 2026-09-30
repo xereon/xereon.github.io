@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DUST II Audio Lab</title>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+<style>
+  :root { --bg: #15130f; --panel: #1f1c17; --ink: #e8dcc4; --dim: #9b8f7a; --acc: #d9a441; --line: #3a342a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
+  header { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 16px; margin: 0; letter-spacing: .08em; }
+  #status { color: var(--dim); font-variant-numeric: tabular-nums; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); margin: 0 0 8px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { background: #2a261f; color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--acc); }
+  button.pending { opacity: .45; }
+  button.primary { background: var(--acc); color: #1b1407; border-color: var(--acc); font-weight: 600; }
+  #pad { width: 100%; aspect-ratio: 1; background: #0f0e0b; border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; display: block; }
+  label { color: var(--dim); display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  input[type=range] { flex: 1; }
+  select { background: #2a261f; color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 4px; width: 100%; }
+  code { color: var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <h1>DUST II · AUDIO LAB</h1>
+  <button class="primary" id="start">Start audio</button>
+  <span id="status">not started</span>
+</header>
+<main>
+  <div id="groups"></div>
+  <aside>
+    <section>
+      <h2>Spatial pad (top-down, you face up)</h2>
+      <canvas id="pad" width="600" height="600"></canvas>
+      <label>Sound <select id="padSound"></select></label>
+      <label>Range <input id="padRange" type="range" min="200" max="4000" value="1600" /> <span id="padRangeV">1600u</span></label>
+      <label><input id="padWall" type="checkbox" /> wall between (occlusion)</label>
+      <p style="color:var(--dim);margin:6px 0 0">Click to fire the sound at that spot. Use headphones: HRTF puts it in 3D.</p>
+    </section>
+    <section>
+      <h2>Scenes</h2>
+      <div class="btns">
+        <button id="sceneFight">Firefight</button>
+        <button id="sceneBomb">Bomb timer</button>
+        <button id="sceneSteps">Footsteps circling</button>
+        <button id="stop">Stop all</button>
+      </div>
+    </section>
+  </aside>
+</main>
+<script type="module">
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+import { applyViewAngles, angleVectors } from '../src/core/mathx.js';
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+World.params = params;
+World.time = 0;
+
+// ---- minimal world for the runtime -----------------------------------------------------------
+const cam = new THREE.PerspectiveCamera(90, 1, 1, 12000);
+cam.position.set(0, 64, 0);
+applyViewAngles(cam, 0, 90, 0); // face north (-Z)
+World.camera = cam;
+let wall = false;
+World.collision = {
+  rayTrace(a, b) { // optional virtual wall across z = -150 for the occlusion toggle
+    const hit = wall && ((a.z > -150) !== (b.z > -150));
+    return { fraction: hit ? 0.5 : 1, startSolid: false, allSolid: false, surface: 'concrete', normal: new THREE.Vector3(), endpos: b };
+  },
+  pointContents() { return 0; },
+};
+World.map = { callouts: {} };
+
+let audio = null, Audio = null, catalog = null;
+async function ensureAudio() {
+  if (audio) return audio;
+  ({ Audio } = await import('../src/audio/audio.js'));
+  catalog = await import('../src/audio/synth/catalog.js');
+  audio = new Audio({ force: true });
+  World.audio = audio;
+  audio.unlock();
+  let last = performance.now();
+  const loop = (t) => { const dt = Math.min(0.1, (t - last) / 1000); last = t; World.time += dt; audio.update(dt); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+  setInterval(() => {
+    const s = audio.stats();
+    $('status').textContent = `${s.state} · ${s.bank?.sounds}/${catalog.soundNames().length} sounds · ${s.bank?.mb} MB · voices ${s.voices}/${s.pool} · env ${s.env} · pending ${s.bank?.pending}`;
+    for (const b of document.querySelectorAll('button[data-name]')) b.classList.toggle('pending', !audio.bank.has(b.dataset.name));
+  }, 300);
+  return audio;
+}
+
+// ---- UI --------------------------------------------------------------------------------------
+async function buildUI() {
+  const cat = await import('../src/audio/synth/catalog.js');
+  const names = cat.soundNames().filter((n) => !n.startsWith('ir_'));
+  const groups = [
+    ['Gunshots (3D close, crossfades to far with distance)', (n) => /^weapon_.*_fire$/.test(n)],
+    ['Your own gun (2D stereo)', (n) => /_fire_2d$/.test(n)],
+    ['Distant gunshots', (n) => /_fire_far$/.test(n)],
+    ['Footsteps & body', (n) => /^(footstep_|jump|land|crouch|fall_|death_)/.test(n)],
+    ['Impacts & hits', (n) => /^(impact_|hit_)/.test(n)],
+    ['Handling', (n) => /^(deploy_|wpn_|knife_)/.test(n)],
+    ['Shells', (n) => /^shell_/.test(n)],
+    ['Grenades', (n) => /^(nade_|he_|flash_|tinnitus|smoke_|molotov|fire_|decoy)/.test(n)],
+    ['Bomb', (n) => /^bomb_/.test(n)],
+    ['UI & music', (n) => /^(ui_|radio_|stinger_)/.test(n)],
+    ['Ambience', (n) => /^amb_/.test(n)],
+  ];
+  for (const [title, test] of groups) {
+    const sec = document.createElement('section');
+    sec.innerHTML = `<h2>${title}</h2><div class="btns"></div>`;
+    const box = sec.querySelector('.btns');
+    for (const n of names.filter(test)) {
+      const b = document.createElement('button');
+      b.textContent = n.replace(/^weapon_|_fire$|_fire_2d$|_fire_far$/g, '');
+      b.dataset.name = n;
+      b.onclick = async () => {
+        const a = await ensureAudio();
+        a.bank.bump([n]);
+        const go = () => {
+          if (/_loop$|^amb_(wind|powerbox|tarp)$/.test(n)) { const h = a.startLoop(n, a.profileOf(n).spatial ? new THREE.Vector3(200, 64, -200) : null); setTimeout(() => h?.stop(0.5), 6000); }
+          else if (a.profileOf(n).spatial) a.playAt(n, new THREE.Vector3(0, 64, -Math.min(300, a.profileOf(n).ref)), { occlude: false });
+          else a.play(n);
+        };
+        if (a.bank.has(n)) go(); else { const off = a.bank.onReady((x) => { if (x === n) { off(); go(); } }); }
+      };
+      box.appendChild(b);
+    }
+    $('groups').appendChild(sec);
+    const opt = document.createElement('optgroup'); opt.label = title;
+    for (const n of names.filter(test)) if (!/_2d$|^(ui_|radio_|stinger_|tinnitus|amb_wind)/.test(n)) { const o = document.createElement('option'); o.value = o.textContent = n; opt.appendChild(o); }
+    if (opt.children.length) $('padSound').appendChild(opt);
+  }
+  $('padSound').value = 'weapon_ak47_fire';
+}
+
+function drawPad(mark) {
+  const c = $('pad'), g = c.getContext('2d'), W = c.width, R = +$('padRange').value;
+  g.fillStyle = '#0f0e0b'; g.fillRect(0, 0, W, W);
+  g.strokeStyle = '#2b261e';
+  for (const r of [0.25, 0.5, 0.75, 1]) { g.beginPath(); g.arc(W / 2, W / 2, r * W / 2, 0, Math.PI * 2); g.stroke(); }
+  g.fillStyle = '#6b604e'; g.font = '11px sans-serif';
+  for (const r of [0.25, 0.5, 0.75, 1]) g.fillText(`${Math.round(R * r)}u`, W / 2 + 4, W / 2 - r * W / 2 + 12);
+  if (wall) { const y = W / 2 + (-150 / R) * (W / 2); g.fillStyle = '#7a3b2b'; g.fillRect(0, y - 3, W, 6); }
+  g.fillStyle = '#d9a441'; g.beginPath(); g.moveTo(W / 2, W / 2 - 12); g.lineTo(W / 2 - 8, W / 2 + 8); g.lineTo(W / 2 + 8, W / 2 + 8); g.fill();
+  if (mark) { g.fillStyle = '#e8dcc4'; g.beginPath(); g.arc(mark[0], mark[1], 6, 0, Math.PI * 2); g.fill(); }
+}
+$('padRange').oninput = () => { $('padRangeV').textContent = `${$('padRange').value}u`; drawPad(); };
+$('padWall').onchange = () => { wall = $('padWall').checked; drawPad(); };
+$('pad').onclick = async (e) => {
+  const a = await ensureAudio();
+  const r = $('pad').getBoundingClientRect(), W = $('pad').width;
+  const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * W;
+  const R = +$('padRange').value;
+  const p = new THREE.Vector3((x - W / 2) / (W / 2) * R, 64, (y - W / 2) / (W / 2) * R); // up on the pad = -Z = north
+  const n = $('padSound').value;
+  a.bank.bump([n, n + '_far']);
+  a.playAt(n, p, {});
+  drawPad([x, y]);
+};
+$('start').onclick = () => ensureAudio();
+$('stop').onclick = () => audio?.stopAll();
+
+// ---- scenes ----------------------------------------------------------------------------------
+const bot = (x, z) => ({ origin: new THREE.Vector3(x, 0, z), eyeHeight: 64, alive: true, velocity: new THREE.Vector3(), onGround: true, helmet: true, armor: 100 });
+$('sceneFight').onclick = async () => {
+  const a = await ensureAudio();
+  const enemy = bot(700, -500), far = bot(-2200, -1800);
+  a.bank.bump(['weapon_ak47_fire', 'weapon_ak47_fire_far', 'weapon_m4a1s_fire', 'weapon_awp_fire', 'weapon_awp_fire_far', 'hit_head_helmet', 'he_explode', 'impact_concrete']);
+  for (let i = 0; i < 12; i++) setTimeout(() => World.emit('fire', { ent: enemy, weapon: 'ak47' }), 300 + i * 100);
+  for (let i = 0; i < 6; i++) setTimeout(() => World.emit('impact', { point: new THREE.Vector3(60 + i * 10, 40, -80), surface: 'concrete' }), 320 + i * 180);
+  setTimeout(() => World.emit('fire', { ent: far, weapon: 'awp' }), 2200);
+  setTimeout(() => World.emit('damage', { victim: enemy, hitgroup: 1, point: new THREE.Vector3(700, 64, -500) }), 3000);
+  setTimeout(() => World.emit('he_detonate', { pos: new THREE.Vector3(-500, 20, -900) }), 3800);
+};
+$('sceneBomb').onclick = async () => {
+  const a = await ensureAudio();
+  World.emit('bomb_planted', { site: 'A', pos: new THREE.Vector3(400, 10, -300), timer: 14 });
+};
+$('sceneSteps').onclick = async () => {
+  const a = await ensureAudio();
+  const e = bot(0, -600);
+  let ang = 0;
+  const surfs = ['sand', 'concrete', 'metal', 'wood'];
+  const id = setInterval(() => {
+    ang += 0.23;
+    e.origin.set(Math.sin(ang) * 500, 0, -Math.cos(ang) * 500);
+    World.emit('footstep', { ent: e, surface: surfs[Math.floor(ang / 1.6) % 4], volume: 1 });
+    if (ang > 12) clearInterval(id);
+  }, 320);
+};
+
+// ---- test API (tools/audiotest.mjs) ----------------------------------------------------------
+function b64(f32) {
+  const u8 = new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength);
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+async function waitReady(a, names, timeout = 60000) {
+  a.bank.bump(names);
+  const t0 = performance.now();
+  while (names.some((n) => !a.bank.has(n))) {
+    if (performance.now() - t0 > timeout) throw new Error('timeout waiting for ' + names.filter((n) => !a.bank.has(n)).join(','));
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+window.__lab = {
+  /** Listener orientation (camera quaternion) must agree with CONTRACT angleVectors(pitch, yaw). */
+  async angles() {
+    const { Audio } = await import('../src/audio/audio.js');
+    const ctx = new OfflineAudioContext(2, 128, 48000);
+    const a = new Audio({ context: ctx, noPreload: true });
+    let worst = 0;
+    for (const [p, y] of [[0, 0], [0, 90], [0, 180], [-30, 45], [45, 270], [10, 315], [-80, 120]]) {
+      applyViewAngles(cam, p, y, 0); cam.updateMatrixWorld();
+      a.update(0.016);
+      const L = ctx.listener, v = angleVectors(p, y);
+      const f = [L.forwardX.value, L.forwardY.value, L.forwardZ.value], u = [L.upX.value, L.upY.value, L.upZ.value];
+      worst = Math.max(worst, Math.abs(f[0] - v.forward.x), Math.abs(f[1] - v.forward.y), Math.abs(f[2] - v.forward.z),
+        Math.abs(u[0] - v.up.x), Math.abs(u[1] - v.up.y), Math.abs(u[2] - v.up.z));
+    }
+    applyViewAngles(cam, 0, 90, 0);
+    return { worst };
+  },
+
+  /** Render in-page (main thread) and return a checksum per sound, to prove browser == node. */
+  async checksums(names) {
+    const cat = await import('../src/audio/synth/catalog.js');
+    const out = {};
+    for (const n of names) {
+      const t0 = performance.now();
+      const r = cat.renderSound(n);
+      let s = 0, sa = 0; for (const c of r.vars[0]) for (let i = 0; i < c.length; i++) { s += c[i] * ((i % 7) + 1); sa += Math.abs(c[i]); }
+      out[n] = { sum: s, abs: sa, len: r.vars[0][0].length, ms: performance.now() - t0 };
+    }
+    return out;
+  },
+
+  /** Real-time boot: how long until the priority set / everything is rendered by the worker. */
+  async bootTiming() {
+    const { Audio } = await import('../src/audio/audio.js');
+    const cat = await import('../src/audio/synth/catalog.js');
+    const t0 = performance.now();
+    const a = new Audio({ force: true, deferGraph: true }); // like the game: graph waits for a gesture
+    const ctorMs = performance.now() - t0;
+    const tu = performance.now(); a.unlock(); const unlockMs = performance.now() - tu;
+    await a.ready;
+    const names = cat.soundNames();
+    const prio = [...names.filter((n) => cat.soundDef(n).tier === 0), 'weapon_glock_fire_2d', 'deploy_knife', 'knife_slash'];
+    const bg = names.filter((n) => cat.soundDef(n).tier <= 2);
+    const tP = await (async () => { while (prio.some((n) => !a.bank.has(n))) await new Promise((r) => setTimeout(r, 20)); return performance.now() - t0; })();
+    // main-thread responsiveness while the worker renders: worst setTimeout lag
+    let worstLag = 0; let stop = false; const lags = [];
+    (async () => { while (!stop) { const s = performance.now(); await new Promise((r) => setTimeout(r, 10)); const l = performance.now() - s - 10; lags.push(l); worstLag = Math.max(worstLag, l); } })();
+    const tAll = await (async () => { while (bg.some((n) => !a.bank.has(n))) await new Promise((r) => setTimeout(r, 50)); return performance.now() - t0; })();
+    stop = true;
+    const st = a.bank.stats();
+    a.ctx?.close?.();
+    lags.sort((x, y) => x - y);
+    return { ctorMs, unlockMs, priorityMs: tP, allMs: tAll, prioritySounds: prio.length, backgroundSounds: bg.length, worstMainThreadLagMs: worstLag, p95LagMs: lags[Math.floor(lags.length * 0.95)] || 0, ...st, workerUsed: !!a.bank.worker };
+  },
+
+  /**
+   * Offline render through the real runtime graph. Output channels:
+   * 0,1 = master L/R (post limiter/ceiling); 2.. = pre-master bus taps (mono).
+   * script(a, h) schedules sounds with {delay}. Returns Float32Array channels.
+   */
+  async offline(scriptName, opts = {}) {
+    const { Audio } = await import('../src/audio/audio.js');
+    const dur = opts.dur ?? 12, sr = 48000;
+    const BUS = ['weapons', 'foley', 'world', 'ambience', 'ui', 'music'];
+    const ctx = new OfflineAudioContext(2 + BUS.length, Math.round(dur * sr), sr);
+    const merger = ctx.createChannelMerger(2 + BUS.length);
+    const masterIn = ctx.createGain();
+    const split = ctx.createChannelSplitter(2);
+    masterIn.connect(split); split.connect(merger, 0, 0); split.connect(merger, 1, 1);
+    merger.connect(ctx.destination);
+    for (const [k, v] of Object.entries(opts.cvars || {})) World.cvar[k] = v;
+    wall = !!opts.wall;
+    cam.position.set(0, 64, 0); applyViewAngles(cam, 0, opts.yaw ?? 90, 0); cam.updateMatrixWorld();
+    const a = new Audio({ context: ctx, destination: masterIn, noPreload: true });
+    BUS.forEach((b, i) => { const g = ctx.createGain(); a.mixer.bus[b].connect(g); g.connect(merger, 0, 2 + i); });
+    await a.ready;
+    const S = SCRIPTS[scriptName];
+    catalog = catalog || await import('../src/audio/synth/catalog.js');
+    await waitReady(a, typeof S.needs === 'function' ? S.needs(opts) : S.needs);
+    // drive it like the game: update() every 50 ms, events at their times (render-quantum aligned)
+    const Q = 128 / sr, slots = new Map();
+    const at = (t, fn) => { const q = Math.max(1, Math.round(t / Q)) * Q; if (q >= dur) return; if (!slots.has(q)) slots.set(q, []); if (fn) slots.get(q).push(fn); };
+    for (let t = 0.05; t < dur; t += 0.05) at(t, null);
+    S.run(a, opts, at);
+    let last = 0;
+    for (const q of [...slots.keys()].sort((x, y) => x - y)) {
+      ctx.suspend(q).then(() => {
+        World.time = q; a.update(q - last); last = q;
+        for (const fn of slots.get(q)) { try { fn(); } catch (e) { console.error(e); } }
+        ctx.resume();
+      });
+    }
+    a.warm(48, 12); // never create HRTF panners mid-render (Chrome deadlocks an offline context)
+    a.update(0.016);
+    const buf = await ctx.startRendering();
+    const chs = [];
+    for (let c = 0; c < buf.numberOfChannels; c++) chs.push(b64(buf.getChannelData(c)));
+    return { sr, channels: chs, buses: BUS, stats: a.stats() };
+  },
+};
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const catalogHas = (n) => !!catalog?.soundDef(n);
+const SCRIPTS = {
+  // one sound, one spot
+  single: {
+    needs: (o) => [o.name, o.name + '_far'].filter((n) => catalogHas(n)),
+    run(a, o, at) { at(0.1, () => a.playAt(o.name, V(...o.pos), { occlude: o.occlude !== false, jitter: 0, variant: 0 })); },
+  },
+  // reference mix: local AK spray, far AWP, suppressed M4, enemy footsteps, HE, headshot, bomb beeps, wind, UI, stinger
+  mix: {
+    needs: ['weapon_ak47_fire_2d', 'weapon_ak47_fire', 'weapon_awp_fire', 'weapon_awp_fire_far', 'weapon_m4a1s_fire', 'footstep_concrete',
+      'footstep_sand', 'he_explode', 'he_explode_far', 'hit_head_helmet', 'bomb_beep', 'amb_wind', 'ui_click', 'stinger_ct_win',
+      'impact_concrete', 'ir_open', 'ir_room', 'ir_tunnel', 'shell_rifle_hard'],
+    run(a, o, at) {
+      at(0.02, () => a.ambient._tryWind());
+      for (let i = 0; i < 10; i++) at(1 + i * 0.1, () => a.play('weapon_ak47_fire_2d', { cat: 'shot', ent: 'me' }));
+      for (let i = 0; i < 6; i++) at(1.02 + i * 0.16, () => a.playAt('impact_concrete', V(80 + i * 12, 60, -600)));
+      at(2.8, () => a.playAt('weapon_awp_fire', V(-1500, 64, -1200)));
+      for (let i = 0; i < 6; i++) at(3.6 + i * 0.09, () => a.playAt('weapon_m4a1s_fire', V(900, 64, -300), { cat: 'shot', ent: 'bot' }));
+      for (let i = 0; i < 8; i++) at(4.6 + i * 0.33, () => a.playAt(i < 4 ? 'footstep_sand' : 'footstep_concrete', V(400 - i * 30, 2, -300 + i * 20)));
+      at(7.0, () => a.playAt('he_explode', V(-600, 20, -500)));
+      at(8.2, () => a.playAt('hit_head_helmet', V(300, 64, -300)));
+      for (let i = 0; i < 6; i++) at(8.6 + i * 0.5, () => a.playAt('bomb_beep', V(500, 10, 200), { jitter: 0 }));
+      at(9.0, () => a.play('ui_click'));
+      at(9.4, () => a.play('stinger_ct_win', { jitter: 0 }));
+    },
+  },
+};
+
+buildUI();
+drawPad();
+if (params.has('autostart')) ensureAudio();
+</script>
+</body>
+</html>

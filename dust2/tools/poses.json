@@ -1,4 +1,192 @@
 {
-  "overview": { "eye": [0, 1600, 1800], "pitch": 40, "yaw": 0, "desc": "Placeholder overhead — map agent replaces all poses" },
-  "t_spawn": { "eye": [0, 64, 0], "pitch": 0, "yaw": 0, "desc": "Placeholder" }
+ "overview": {
+  "eye": [
+   -150,
+   2364,
+   1900
+  ],
+  "pitch": 48,
+  "yaw": 90,
+  "desc": "High oblique over T spawn looking north across the whole map"
+ },
+ "t_spawn": {
+  "eye": [
+   -742,
+   192,
+   860
+  ],
+  "pitch": 2,
+  "yaw": 0,
+  "desc": "T spawn looking east down the road toward outside long (same spot as the CS:GO reference frame)"
+ },
+ "outside_long": {
+  "eye": [
+   560,
+   64,
+   330
+  ],
+  "pitch": 1,
+  "yaw": 88,
+  "desc": "Outside long looking north up the street to the long doors"
+ },
+ "long_doors": {
+  "eye": [
+   636,
+   64,
+   -120
+  ],
+  "pitch": 0,
+  "yaw": 90,
+  "desc": "In front of long doors looking north through both door frames"
+ },
+ "long_a": {
+  "eye": [
+   1420,
+   64,
+   -880
+  ],
+  "pitch": 0,
+  "yaw": 90,
+  "desc": "Exit of long doors / long corner looking north up Long A toward A"
+ },
+ "pit": {
+  "eye": [
+   1400,
+   64,
+   -960
+  ],
+  "pitch": 14,
+  "yaw": 280,
+  "desc": "Bottom of long looking south down into the pit, side pit on the left"
+ },
+ "a_site_from_long": {
+  "eye": [
+   1480,
+   62,
+   -2160
+  ],
+  "pitch": 2,
+  "yaw": 128,
+  "desc": "Top of long (A car / cross) looking NW up the ramp onto A site"
+ },
+ "a_site_from_ct": {
+  "eye": [
+   420,
+   160,
+   -2560
+  ],
+  "pitch": 4,
+  "yaw": 0,
+  "desc": "A short / top of short looking east across A site"
+ },
+ "goose": {
+  "eye": [
+   1215,
+   160,
+   -2755
+  ],
+  "pitch": 6,
+  "yaw": 225,
+  "desc": "Goose corner looking back SW across the site to short and CT"
+ },
+ "catwalk": {
+  "eye": [
+   -430,
+   -61,
+   -1180
+  ],
+  "pitch": -6,
+  "yaw": 38,
+  "desc": "Lower mid looking NE up at catwalk and xbox, short beyond"
+ },
+ "mid_from_t": {
+  "eye": [
+   -420,
+   64,
+   -420
+  ],
+  "pitch": 1,
+  "yaw": 90,
+  "desc": "Top mid looking north down mid to the mid doors"
+ },
+ "xbox": {
+  "eye": [
+   -440,
+   -61,
+   -1260
+  ],
+  "pitch": 2,
+  "yaw": 55,
+  "desc": "Lower mid looking at xbox and the catwalk ledge"
+ },
+ "mid_doors": {
+  "eye": [
+   -460,
+   -64,
+   -1960
+  ],
+  "pitch": 2,
+  "yaw": 270,
+  "desc": "CT mid looking south at the mid doors gap"
+ },
+ "lower_tunnels": {
+  "eye": [
+   -1120,
+   -48,
+   -1440
+  ],
+  "pitch": 2,
+  "yaw": 0,
+  "desc": "Lower tunnels looking east to the mid exit"
+ },
+ "upper_tunnels": {
+  "eye": [
+   -1660,
+   96,
+   -1080
+  ],
+  "pitch": 2,
+  "yaw": 133,
+  "desc": "Upper tunnels looking NW toward the exit to B"
+ },
+ "b_site": {
+  "eye": [
+   -1985,
+   68,
+   -1880
+  ],
+  "pitch": 4,
+  "yaw": 55,
+  "desc": "B tunnel exit looking NE across B site"
+ },
+ "b_from_window": {
+  "eye": [
+   -1372,
+   188,
+   -2665
+  ],
+  "pitch": 12,
+  "yaw": 200,
+  "desc": "B window ledge looking into B site"
+ },
+ "b_doors": {
+  "eye": [
+   -1000,
+   24,
+   -2300
+  ],
+  "pitch": 2,
+  "yaw": 180,
+  "desc": "Mid-to-B hall looking west at B doors"
+ },
+ "ct_spawn": {
+  "eye": [
+   160,
+   -62,
+   -2300
+  ],
+  "pitch": 2,
+  "yaw": 205,
+  "desc": "CT spawn looking SW toward CT mid"
+ }
 }

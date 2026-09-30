@@ -1,5 +1,11 @@
 // Registry of every material / decal definition. Keys are the CONTRACT §5 names.
 import * as masonry from './masonry.js';
+import * as ground from './ground.js';
+import * as wood from './wood.js';
+import * as metal from './metal.js';
+import * as cloth from './cloth.js';
+import * as misc from './misc.js';
+import { DECALS as DECAL_DEFS, DETAIL as DETAIL_DEF } from './decals.js';
 import { C } from './util.js';
 
 // Flat colours used before the bake finishes (and in Node tests).
@@ -12,6 +18,10 @@ export const FALLBACK = {
   tile_wall: 0xc9b89a, cloth_awning: 0x8d3a2a, cloth_tarp: 0x6b6b4a, rope: 0x9b8660,
   sandbag: 0xb09a72, arch_stone: 0xcab790, roof_tile: 0x9a5a3a, window_frame: 0x4b3a2a,
   glass: 0x88a0a8, poster: 0xc8b8a0, crate_label: 0x9b7447,
+  // CS2-palette additions
+  plaster_white: 0xe0d9cb, plaster_band_ochre: 0xcfa24e, plaster_band_teal: 0x629c8c,
+  cobblestone: 0xb3a792, paving_setts: 0xb8ae9c, asphalt: 0x7d7670, curb_redwhite: 0xb8a8a0,
+  flagstone: 0xcdb48f, adobe: 0xcc9860, wood_shutter: 0x4f8a5e,
 };
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -25,14 +35,13 @@ const placeholder = (key) => ({
 }`,
 });
 
-const ALL = { ...masonry };
+const ALL = { ...masonry, ...ground, ...wood, ...metal, ...cloth, ...misc };
 export const DEFS = {};
 for (const k of Object.keys(FALLBACK)) DEFS[k] = ALL[k] || placeholder(k);
+// anti-tiling height-blend depth: crisp for discrete elements (stones overlap mortar),
+// soft for continuous surfaces (plaster, sand) so seams never read as straight cuts
+const BLEND = { rock: 0.14, brick: 0.12, gravel: 0.12, tile: 0.14 };
+for (const d of Object.values(DEFS)) d.blendDepth ??= BLEND[d.surface] ?? 0.35;
 
-export const DECALS = {};
-export const DETAIL = {
-  size: 256, world: 16, normal: 1, ao: 0, cavity: 0, seed: 5,
-  glsl: `void surface(vec2 uv, inout Surf o) {
-  o.h = 0.04 * fbmU(uv, 32.0, 3, 0.55, 1.0) + 0.02 * fbmU(uv, 128.0, 1, 0.5, 2.0);
-}`,
-};
+export const DECALS = DECAL_DEFS;
+export const DETAIL = DETAIL_DEF;

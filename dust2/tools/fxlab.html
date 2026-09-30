@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>DUST II — FX lab</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="module">
+import { boot } from './fxlab-page.js';
+boot().catch((e) => { console.error('[fxlab] boot failed', e); window.__FXLAB_ERROR = String(e && e.stack || e); });
+</script>
+</body>
+</html>

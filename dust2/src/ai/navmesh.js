@@ -37,6 +37,10 @@ const ZERO = new THREE.Vector3();
 const OFFS = [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8], [8, 8], [-8, 8], [8, -8], [-8, -8]];
 // forward half of the 8-neighbourhood (each pair is tested once)
 const NBR = [[1, 0], [0, 1], [1, 1], [1, -1]];
+// ledges: the top spot may overhang the edge by 16u while the floor spot keeps 16u off the wall,
+// so jump/drop partners can sit two columns apart
+const NBR2 = [[2, 0], [0, 2], [2, 1], [1, 2], [2, -1], [1, -2], [2, 2], [2, -2]];
+const AXIS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const CLEAR_COST = [1.9, 1.3, 1.08, 1, 1];
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -112,13 +116,30 @@ function* bakeSteps(nav, map) {
   const yTop = bmax.y + 8, yBot = bmin.y - 8;
 
   // --- 1. column scan -> standable spots
-  const PX = [], PY = [], PZ = [], PC = [];
-  const colStart = new Int32Array(nx * nz + 1);
+  // Per column: every floor the downward ray finds, then (pass 2) the heights of neighbouring
+  // columns too, which catches hulls bridging narrow gaps and standing on ledge overhangs.
+  const cols = new Array(nx * nz);
+  const tryPlace = (list, cx, cz, hy) => {
+    for (const [ox, oz] of OFFS) {
+      const x = cx + ox, z = cz + oz;
+      for (let lift = 2; lift <= STEP + 2; lift += STEP) {
+        _a.set(x, hy + lift, z); _b.set(x, hy - 22, z);
+        const tr = hull(_a, _b);
+        if (tr.startSolid) continue;
+        if (tr.fraction >= 1 || tr.normal.y < 0.7) break;
+        const ly = tr.endpos.y;
+        for (let k = 0; k < list.length; k += 4) if (Math.abs(list[k + 1] - ly) < 8) return;
+        // overhang: the hull stands on an edge, nothing under its centre (ledge lips, wall tops)
+        _a.set(x, ly + 1, z); _b.set(x, ly - 20, z);
+        const oh = ray(_a, _b).fraction >= 1 ? 1 : 0;
+        list.push(x, ly, z, oh);
+        return;
+      }
+    }
+  };
   const heights = [];
   for (let iz = 0; iz < nz; iz++) {
     for (let ix = 0; ix < nx; ix++) {
-      const c = ix + iz * nx;
-      colStart[c] = PX.length;
       const cx = x0 + (ix + 0.5) * C + 0.0137, cz = z0 + (iz + 0.5) * C + 0.0091;
       let y = yTop;
       heights.length = 0;
@@ -130,25 +151,37 @@ function* bakeSteps(nav, map) {
         if (tr.normal.y >= 0.7) heights.push(hy);
         y = hy - 1;
       }
-      const first = PX.length;
-      for (const hy of heights) {
-        // drop a standing hull at the centre, then at offsets inside the cell
-        found: for (const [ox, oz] of OFFS) {
-          const x = cx + ox, z = cz + oz;
-          for (let lift = 2; lift <= STEP + 2; lift += STEP) {
-            _a.set(x, hy + lift, z); _b.set(x, hy - 22, z);
-            const tr = hull(_a, _b);
-            if (tr.startSolid) continue;
-            if (tr.fraction >= 1 || tr.normal.y < 0.7) break;
-            const ly = tr.endpos.y;
-            for (let k = first; k < PX.length; k++) if (Math.abs(PY[k] - ly) < 8) break found;
-            PX.push(x); PY.push(ly); PZ.push(z); PC.push(c);
-            break found;
-          }
+      const list = [];
+      for (const hy of heights) tryPlace(list, cx, cz, hy);
+      cols[ix + iz * nx] = list;
+    }
+    if ((iz & 7) === 7) yield;
+  }
+  const base = cols.map((l) => l.length);
+  for (let iz = 0; iz < nz; iz++) {
+    for (let ix = 0; ix < nx; ix++) {
+      const list = cols[ix + iz * nx];
+      const cx = x0 + (ix + 0.5) * C + 0.0137, cz = z0 + (iz + 0.5) * C + 0.0091;
+      for (const [ox, oz] of AXIS4) {
+        const jx = ix + ox, jz = iz + oz;
+        if (jx < 0 || jz < 0 || jx >= nx || jz >= nz) continue;
+        const c2 = jx + jz * nx, other = cols[c2];
+        for (let k = 0; k < base[c2]; k += 4) {
+          const hy = other[k + 1];
+          let have = false;
+          for (let m = 0; m < list.length; m += 4) if (Math.abs(list[m + 1] - hy) < 8) { have = true; break; }
+          if (!have) tryPlace(list, cx, cz, hy);
         }
       }
     }
     if ((iz & 7) === 7) yield;
+  }
+  const PX = [], PY = [], PZ = [], PC = [], PO = [];
+  const colStart = new Int32Array(nx * nz + 1);
+  for (let c = 0; c < nx * nz; c++) {
+    colStart[c] = PX.length;
+    const l = cols[c];
+    for (let k = 0; k < l.length; k += 4) { PX.push(l[k]); PY.push(l[k + 1]); PZ.push(l[k + 2]); PO.push(l[k + 3]); PC.push(c); }
   }
   colStart[nx * nz] = PX.length;
   const N = PX.length;
@@ -160,7 +193,8 @@ function* bakeSteps(nav, map) {
   const addLink = (a, b, type) => {
     const d = Math.hypot(PX[b] - PX[a], PY[b] - PY[a], PZ[b] - PZ[a]);
     LA.push(a); LB.push(b); LT.push(type);
-    LD.push(type === LINK_WALK ? d : type === LINK_DROP ? d + 24 + Math.max(0, PY[a] - PY[b] - 150) * 4 : d + 60);
+    // jumps are slow and fail sometimes: real players only take them when it saves real time
+    LD.push(type === LINK_WALK ? d : type === LINK_DROP ? d + 40 + Math.max(0, PY[a] - PY[b] - 150) * 4 : type === LINK_JUMP ? d + 160 : d + 320);
   };
 
   const straight = (a, b) => {
@@ -212,7 +246,18 @@ function* bakeSteps(nav, map) {
     if (tr.startSolid || tr.fraction >= 1) return false;
     return Math.abs(tr.endpos.y - PY[l]) < 4;
   };
+  let hasDropRef = null;
+  const tryDrop = (a, b, dy, ady, ring = 0) => {
+    const up = dy < 0 ? a : b, lo = dy < 0 ? b : a;
+    if (!dropTest(up, lo)) return;
+    addLink(up, lo, LINK_DROP);
+    if (ady <= JUMP_UP) addLink(lo, up, LINK_JUMP);
+    else if (ady <= CJUMP_UP) addLink(lo, up, LINK_CJUMP);
+    if (hasDropRef) hasDropRef[up] = ring ? 2 : 1;
+  };
 
+  const hasDrop = new Uint8Array(N);
+  hasDropRef = hasDrop;
   for (let a = 0; a < N; a++) {
     const c = PC[a], ix = c % nx, iz = (c / nx) | 0;
     for (const [ox, oz] of NBR) {
@@ -224,16 +269,35 @@ function* bakeSteps(nav, map) {
         const h = Math.hypot(PX[b] - PX[a], PZ[b] - PZ[a]);
         let walked = false;
         if (ady <= Math.max(STEP + 1, h * 1.05 + 1)) {
-          if (straight(a, b) || simWalk(a, b)) { addLink(a, b, LINK_WALK); addLink(b, a, LINK_WALK); walked = true; }
-        }
-        if (!walked && ady > 8 && ady <= DROP_MAX) {
-          const up = dy < 0 ? a : b, lo = dy < 0 ? b : a;
-          if (dropTest(up, lo)) {
-            addLink(up, lo, LINK_DROP);
-            if (ady <= JUMP_UP) addLink(lo, up, LINK_JUMP);
-            else if (ady <= CJUMP_UP) addLink(lo, up, LINK_CJUMP);
+          // a clean straight sweep is symmetric; stepped moves are not (down 25u is fine, up isn't)
+          if (straight(a, b)) { addLink(a, b, LINK_WALK); addLink(b, a, LINK_WALK); walked = true; }
+          else {
+            const ab = simWalk(a, b), ba = simWalk(b, a);
+            if (ab) addLink(a, b, LINK_WALK);
+            if (ba) addLink(b, a, LINK_WALK);
+            walked = ab && ba;
+            // one-way walk down a lip: the way back up may still be a jump
+            if (ab !== ba && ady > STEP && ady <= JUMP_UP) addLink(ab ? b : a, ab ? a : b, LINK_JUMP);
           }
         }
+        if (!walked && ady > 8 && ady <= DROP_MAX) tryDrop(a, b, dy, ady);
+      }
+    }
+    if ((a & 1023) === 1023) yield;
+  }
+  // second ring: only ledge pairs that found no drop/jump partner in the first ring
+  for (let a = 0; a < N; a++) {
+    const c = PC[a], ix = c % nx, iz = (c / nx) | 0;
+    for (const [ox, oz] of NBR2) {
+      const jx = ix + ox, jz = iz + oz;
+      if (jx < 0 || jz < 0 || jx >= nx || jz >= nz) continue;
+      const c2 = jx + jz * nx;
+      for (let b = colStart[c2], e = colStart[c2 + 1]; b < e; b++) {
+        const dy = PY[b] - PY[a], ady = Math.abs(dy);
+        if (ady <= STEP + 1 || ady > DROP_MAX) continue;
+        const up = dy < 0 ? a : b;
+        if (hasDrop[up] >= 2) continue;
+        tryDrop(a, b, dy, ady, 1);
       }
     }
     if ((a & 1023) === 1023) yield;
@@ -274,8 +338,8 @@ function* bakeSteps(nav, map) {
     }
   }
   const remap = new Int32Array(N).fill(-1);
-  const X = [], Y = [], Z = [], COL = [];
-  for (let i = 0; i < N; i++) if (keep[i]) { remap[i] = X.length; X.push(PX[i]); Y.push(PY[i]); Z.push(PZ[i]); COL.push(PC[i]); }
+  const X = [], Y = [], Z = [], COL = [], OH = [];
+  for (let i = 0; i < N; i++) if (keep[i]) { remap[i] = X.length; X.push(PX[i]); Y.push(PY[i]); Z.push(PZ[i]); COL.push(PC[i]); OH.push(PO[i]); }
   const links = [];
   for (let i = 0; i < LA.length; i++) {
     const a = remap[LA[i]], b = remap[LB[i]];
@@ -283,10 +347,13 @@ function* bakeSteps(nav, map) {
   }
   nav.stats.pruned = N - X.length;
   yield;
-  nav._finish(X, Y, Z, COL, nx, nz, x0, z0, links);
+  nav._finish(X, Y, Z, COL, nx, nz, x0, z0, links, OH);
   yield;
+  nav._walkReach(map);
   nav._assignAreas(map);
   nav._coverage(map);
+  // warm the A* up so the first in-game path doesn't pay the JIT (≈30 ms) mid-round
+  for (let i = 0; i < 6 && nav.count > 1; i++) nav.astar((i * 7919) % nav.count, (i * 104729 + 13) % nav.count);
 }
 
 // ---- runtime ------------------------------------------------------------------------------
@@ -305,7 +372,7 @@ class NavMesh {
     this.failCost = null;   // Float32Array per node: learned penalty from failed traversals
   }
 
-  _finish(X, Y, Z, COL, nx, nz, x0, z0, links = []) {
+  _finish(X, Y, Z, COL, nx, nz, x0, z0, links = [], OH = null) {
     const n = X.length;
     this.count = n; this.nx = nx; this.nz = nz; this.x0 = x0; this.z0 = z0;
     this.px = Float32Array.from(X); this.py = Float32Array.from(Y); this.pz = Float32Array.from(Z);
@@ -330,11 +397,32 @@ class NavMesh {
     const clear = new Uint8Array(n).fill(255);
     const q = new Int32Array(n);
     let qh = 0, qt = 0;
+    const deg = new Uint8Array(n), ridge = new Uint8Array(n);
+    const oh = this.overhang = OH ? Uint8Array.from(OH) : new Uint8Array(n);
     for (let i = 0; i < n; i++) {
       let w = 0;
       for (let k = ls[i]; k < ls[i + 1]; k++) if (this.linkType[k] === LINK_WALK) w++;
+      deg[i] = Math.min(255, w);
       if (w < 8) { clear[i] = 0; q[qt++] = i; }
     }
+    // ridge: a centre-supported spot with no supported same-level floor on both sides of an axis
+    // (the top of a thin wall or crate edge — walkable in theory, a tightrope in practice)
+    const supported = (i, dx, dz) => {
+      const c = this.col[i], ix = c % nx + dx, iz = ((c / nx) | 0) + dz;
+      if (ix < 0 || iz < 0 || ix >= nx || iz >= nz) return false;
+      const c2 = ix + iz * nx;
+      for (let k = ls[i]; k < ls[i + 1]; k++) {
+        const b = this.linkTo[k];
+        if (this.linkType[k] === LINK_WALK && this.col[b] === c2 && !oh[b]) return true;
+      }
+      return false;
+    };
+    for (let i = 0; i < n; i++) {
+      if (oh[i]) continue;
+      if ((!supported(i, 1, 0) && !supported(i, -1, 0)) || (!supported(i, 0, 1) && !supported(i, 0, -1))) ridge[i] = 1;
+    }
+    this.walkDeg = deg;
+    this.ridge = ridge;
     while (qh < qt) {
       const a = q[qh++];
       if (clear[a] >= 4) continue;
@@ -345,8 +433,17 @@ class NavMesh {
     }
     for (let i = 0; i < n; i++) if (clear[i] > 4) clear[i] = 4;
     this.clear = clear;
-    // bake entry cost multipliers into links
-    for (let a = 0; a < n; a++) for (let k = ls[a]; k < ls[a + 1]; k++) this.linkCost[k] *= CLEAR_COST[clear[this.linkTo[k]]];
+    // bake entry cost multipliers into links; hopping onto thin wall tops / crate edges is
+    // parkour, not how people move around — only when there's no other way
+    for (let a = 0; a < n; a++) for (let k = ls[a]; k < ls[a + 1]; k++) {
+      const b = this.linkTo[k], t = this.linkType[k];
+      this.linkCost[k] *= CLEAR_COST[clear[b]];
+      if ((t === LINK_JUMP || t === LINK_CJUMP) && deg[b] < 5) this.linkCost[k] += 2500;
+      if (ridge[b]) this.linkCost[k] += 600;
+      else if (oh[b]) this.linkCost[k] += 120;
+    }
+    // walk-reachable set: spawn-connected without any jump (tactical spots must be in it)
+    this.walkReach = new Uint8Array(n);
     this.failCost = new Float32Array(n);
     // A* scratch
     this._g = new Float32Array(n);
@@ -356,6 +453,22 @@ class NavMesh {
     this._heapN = new Int32Array(Math.max(16, n));
     this._heapF = new Float32Array(Math.max(16, n));
     this.area = new Uint16Array(n).fill(0xffff);
+  }
+
+  _walkReach(map) {
+    const wr = this.walkReach, n = this.count;
+    const q = [];
+    for (const t of ['T', 'CT']) for (const sp of map?.spawns?.[t] || []) { const k = this.nearest(sp.pos); if (k >= 0 && !wr[k]) { wr[k] = 1; q.push(k); } }
+    if (!q.length) { wr.fill(1); return; }
+    for (let h = 0; h < q.length; h++) {
+      const a = q[h];
+      for (let k = this.linkStart[a]; k < this.linkStart[a + 1]; k++) {
+        const t = this.linkType[k], b = this.linkTo[k];
+        if ((t === LINK_WALK || t === LINK_DROP) && !wr[b]) { wr[b] = 1; q.push(b); }
+      }
+    }
+    let c = 0; for (let i = 0; i < n; i++) c += wr[i];
+    this.stats.walkReach = c;
   }
 
   _assignAreas(map) {
@@ -411,6 +524,9 @@ class NavMesh {
 
   pos(i, out = new THREE.Vector3()) { return out.set(this.px[i], this.py[i], this.pz[i]); }
 
+  /** A spot a player would actually stand on (not a thin wall top / ledge lip). */
+  solidSpot(i) { return this.walkDeg[i] >= 5 && this.walkReach[i] === 1 && !this.ridge[i] && !this.overhang[i]; }
+
   colOf(x, z) {
     const ix = Math.floor((x - this.x0) / NAV_CELL), iz = Math.floor((z - this.z0) / NAV_CELL);
     if (ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz) return -1;
@@ -435,6 +551,37 @@ class NavMesh {
       }
     }
     return best;
+  }
+
+  /** Like nearest(), but the node must be reachable in a straight hull sweep (not across a wall). */
+  nearestReachable(p, maxUp = 40) {
+    if (!this.count) return -1;
+    const cw = World.collision || this.map?.collision;
+    const ix = Math.floor((p.x - this.x0) / NAV_CELL), iz = Math.floor((p.z - this.z0) / NAV_CELL);
+    const cand = this._nr || (this._nr = []);
+    cand.length = 0;
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const jx = ix + dx, jz = iz + dz;
+      if (jx < 0 || jz < 0 || jx >= this.nx || jz >= this.nz) continue;
+      const c = jx + jz * this.nx;
+      for (let k = this.colStart[c], e = this.colStart[c + 1]; k < e; k++) {
+        const dy = this.py[k] - p.y;
+        cand.push(k, (this.px[k] - p.x) ** 2 + (this.pz[k] - p.z) ** 2 + (dy > maxUp ? (dy * 6) ** 2 : (dy * 2.5) ** 2));
+      }
+    }
+    if (!cand.length || !cw) return this.nearest(p, maxUp);
+    // selection of the best few by score
+    for (let t = 0; t < 6; t++) {
+      let bi = -1, bs = Infinity;
+      for (let i = 0; i < cand.length; i += 2) if (cand[i + 1] < bs) { bs = cand[i + 1]; bi = i; }
+      if (bi < 0) break;
+      const k = cand[bi];
+      cand[bi + 1] = Infinity;
+      _a.set(p.x, p.y + STEP, p.z); _b.set(this.px[k], this.py[k] + STEP, this.pz[k]);
+      const tr = cw.hullTrace(HULL_MIN, HULL_MAX, _a, _b, MASK_PLAYER);
+      if (tr.startSolid || tr.fraction >= 1) return k;
+    }
+    return this.nearest(p, maxUp);
   }
 
   areaOf(p) {
@@ -488,7 +635,7 @@ class NavMesh {
   }
 
   /** Nodes near `near` that a threat at `threatEye` cannot see (standing), closest first. */
-  hidingSpots(threatEye, near, radius = 400, max = 6) {
+  hidingSpots(threatEye, near, radius = 400, max = 6, maxChecks = 200) {
     const res = [];
     if (!this.count) return res;
     const cw = World.collision || this.map?.collision;
@@ -498,9 +645,9 @@ class NavMesh {
     const gen = ++this._gen;
     const q = [start];
     this._seen[start] = gen;
-    for (let h = 0; h < q.length && q.length < 600 && res.length < max; h++) {
+    for (let h = 0; h < q.length && q.length < 600 && res.length < max && maxChecks > 0; h++) {
       const a = q[h];
-      if (h % 2 === 0) {
+      if (h % 2 === 0 && maxChecks-- > 0) {
         _b.set(this.px[a], this.py[a] + EYE, this.pz[a]);
         if (cw.rayTrace(threatEye, _b, MASK_VISIBLE).fraction < 1) {
           _b.y = this.py[a] + 46; // crouched eye too
@@ -523,6 +670,7 @@ class NavMesh {
     const len = Math.hypot(dx, dz);
     const steps = Math.ceil(len / (NAV_CELL * 0.5));
     let cur = a;
+    this._lwTight = this.clear[a] === 0 || this.clear[b] === 0;
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
       const c = this.colOf(ax + dx * t, az + dz * t);
@@ -538,9 +686,20 @@ class NavMesh {
       if (nxt < 0) return false;
       if (nxt !== b && this.clear[nxt] < minClear) return false;
       if (this.failCost[nxt] > 0) return false;
+      if (this.clear[nxt] === 0) this._lwTight = true;
       cur = nxt;
     }
     return cur === b;
+  }
+
+  /** Real hull sweep between two nodes, lifted by step height so stairs don't count. */
+  sweepClear(a, b) {
+    const cw = World.collision || this.map?.collision;
+    if (!cw) return true;
+    _a.set(this.px[a], this.py[a] + STEP, this.pz[a]);
+    _b.set(this.px[b], this.py[b] + STEP, this.pz[b]);
+    const tr = cw.hullTrace(HULL_MIN, HULL_MAX, _a, _b, MASK_PLAYER);
+    return !tr.startSolid && tr.fraction >= 1;
   }
 
   linkBetween(a, b) {
@@ -557,7 +716,7 @@ class NavMesh {
     if (s === g) return [s];
     const extra = opts.nodeCost || null, fail = this.failCost;
     const maxExpand = opts.maxExpand || 60000;
-    const W = opts.weight ?? 1.15;
+    const W = opts.weight ?? 1.5;
     const gen = ++this._gen;
     const G = this._g, F = this._from, seen = this._seen, closed = this._closed;
     const hn = this._heapN, hf = this._heapF;
@@ -632,7 +791,8 @@ class NavMesh {
       if (typeOf(nodes[i], nodes[j]) === LINK_WALK) {
         const minC = Math.min(1, this.clear[nodes[i]]);
         while (j + 1 < n && j + 1 - i < 40 && typeOf(nodes[j], nodes[j + 1]) === LINK_WALK &&
-               this.lineWalk(nodes[i], nodes[j + 1], Math.min(minC, this.clear[nodes[j + 1]] < 1 ? 0 : 1))) j++;
+               this.lineWalk(nodes[i], nodes[j + 1], Math.min(minC, this.clear[nodes[j + 1]] < 1 ? 0 : 1)) &&
+               (!this._lwTight || this.sweepClear(nodes[i], nodes[j + 1]))) j++;
       }
       const v = this.pos(nodes[j]);
       v.n = nodes[j]; v.t = typeOf(nodes[j - 1], nodes[j]);

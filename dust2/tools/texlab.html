@@ -48,22 +48,26 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 window.renderer = renderer;
 TextureLib.setRenderer(renderer);
+if (P.has('profile')) TextureLib.setProfile(true);
 
 const t0 = performance.now();
+if (P.has('eager')) TextureLib.setEager(true);
 await TextureLib.ready;
+const readyMs = performance.now() - t0;
+const keys = (P.get('keys') || TextureLib.keys().join(',')).split(',').filter(Boolean);
+TextureLib.preload([...keys, 'sand_floor', 'plaster_wall', 'wood_crate', 'concrete_wall', ...(view === 'decals' ? TextureLib.decalTypes() : [])]);
 // force GPU completion so the timing is honest
 { const px = new Uint8Array(4); const rt = new THREE.WebGLRenderTarget(1, 1); renderer.setRenderTarget(rt); renderer.readRenderTargetPixels(rt, 0, 0, 1, 1, px); renderer.setRenderTarget(null); rt.dispose(); }
 const bakeMs = performance.now() - t0;
 
-const keys = (P.get('keys') || TextureLib.keys().join(',')).split(',').filter(Boolean);
 const labels = document.getElementById('labels');
 function label(x, y, html) { const d = document.createElement('div'); d.className = 'lab'; d.style.left = x + 'px'; d.style.top = y + 'px'; d.innerHTML = html; labels.appendChild(d); }
 
 // ---- lighting rig shared by the 3D views --------------------------------------------------
 function rig(scene, target, size) {
-  const hemi = new THREE.HemisphereLight(0xbcd3ef, 0x9a7e58, 1.15);
+  const hemi = new THREE.HemisphereLight(0xbcd3ef, 0x9a7e58, 0.9);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffeed8, 3.4);
+  const sun = new THREE.DirectionalLight(0xffeed8, 2.7);
   sun.position.copy(target).add(new THREE.Vector3(0.55, 0.75, 0.42).normalize().multiplyScalar(size * 3));
   sun.target.position.copy(target);
   sun.castShadow = true;
@@ -151,7 +155,49 @@ function layout(cols, rows) {
 }
 
 const st = TextureLib.stats();
-if (view === 'board') {
+if (view === 'bench') {
+  // stage micro-benchmark: re-bake one material with syncs between passes
+  const { Baker } = await import('../src/art/gpu.js');
+  const { DEFS } = await import('../src/art/gen/index.js');
+  const { LIB, LIB_GROUND, LIB_WOOD } = await import('../src/art/gen/lib.js');
+  const out = [];
+  const sync = (rt) => { const px = new Uint8Array(4); renderer.readRenderTargetPixels(rt, 0, 0, 1, 1, px); };
+  const SYN = {
+    syn_empty: 'void surface(vec2 uv, inout Surf o) { o.h = uv.x; }',
+    syn_gn20: 'void surface(vec2 uv, inout Surf o) { float a = 0.0; for (int i = 0; i < 20; i++) a += gnoise(uv * 32.0 + float(i) * 0.37, vec2(32.0), float(i)); o.h = a; }',
+    syn_vn20: 'void surface(vec2 uv, inout Surf o) { float a = 0.0; for (int i = 0; i < 20; i++) a += vnoise(uv * 32.0 + float(i) * 0.37, vec2(32.0), float(i)); o.h = a; }',
+    syn_h80: 'void surface(vec2 uv, inout Surf o) { float a = 0.0; for (int i = 0; i < 80; i++) a += hash1(floor(uv * 512.0) + float(i), float(i)); o.h = a; }',
+    syn_wor5: 'void surface(vec2 uv, inout Surf o) { float a = 0.0; for (int i = 0; i < 5; i++) a += worley(uv * 16.0 + float(i) * 0.37, vec2(16.0), 0.9, float(i)).w; o.h = a; }',
+    syn_tex20: 'void surface(vec2 uv, inout Surf o) { float a = 0.0; for (int i = 0; i < 20; i++) a += texture(uCanvas, uv * (1.0 + float(i)) + 0.37 * float(i)).r; o.h = a; }',
+  };
+  for (const k of keys) {
+    const def = SYN[k] ? { key: k, glsl: SYN[k], world: 128 } : { ...DEFS[k], key: k };
+    def.lib = LIB + LIB_GROUND + LIB_WOOD;
+    const size = SYN[k] ? 512 : def.size || (def.hero ? 1024 : 512);
+    const b = new Baker(renderer);
+    const fm = b.fieldMaterial(def, size, null);
+    for (let rep = 0; rep < 2; rep++) {
+      const T = {};
+      let t = performance.now();
+      const lap = (n) => { const x = performance.now(); T[n] = +(x - t).toFixed(0); t = x; };
+      const mk = (count, type, mips) => new THREE.WebGLRenderTarget(size, size, { count, type, depthBuffer: false, generateMipmaps: mips, minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter });
+      const field = mk(2, THREE.HalfFloatType, false);
+      renderer.setRenderTarget(field); b.quad.material = fm; renderer.render(b.scene, b.cam); sync(field); lap('field');
+      renderer.setRenderTarget(field); renderer.render(b.scene, b.cam); sync(field); lap('field2');
+      const o1 = mk(3, THREE.UnsignedByteType, false);
+      b.final.uniforms.tA.value = field.textures[0]; b.final.uniforms.tB.value = field.textures[1];
+      b.final.uniforms.uRes.value.set(size, size); b.final.uniforms.uPx.value.set(1 / size, 1 / size);
+      b.quad.material = b.final; renderer.setRenderTarget(o1); renderer.render(b.scene, b.cam); sync(o1); lap('final');
+      const o2 = mk(3, THREE.UnsignedByteType, true);
+      renderer.setRenderTarget(o2); renderer.render(b.scene, b.cam); sync(o2); lap('final+mips');
+      renderer.setRenderTarget(null);
+      field.dispose(); o1.dispose(); o2.dispose();
+      out.push(k + ' ' + size + ' ' + JSON.stringify(T));
+    }
+  }
+  console.log('BENCH\n' + out.join('\n'));
+  window.__BENCH = out;
+} else if (view === 'board') {
   const [, H] = layout(3, keys.length);
   keys.forEach((k, i) => {
     const y = i * CH;
@@ -203,8 +249,8 @@ if (view === 'board') {
   });
 }
 
-document.getElementById('stat').textContent = `bake ${bakeMs.toFixed(0)} ms (lib ${st.ms} ms, ${st.mode}) · ${keys.length} materials · ${renderer.info.memory.textures} textures`;
-window.__TEXLAB = { bakeMs, stats: st, maxAniso: renderer.capabilities.getMaxAnisotropy() };
+document.getElementById('stat').textContent = `bake ${bakeMs.toFixed(0)} ms (ready ${readyMs.toFixed(0)} ms, ${st.mode}, ${st.baked} baked) · ${keys.length} materials · ${renderer.info.memory.textures} textures`;
+window.__TEXLAB = { bakeMs, readyMs, stats: st, maxAniso: renderer.capabilities.getMaxAnisotropy() };
 window.__TEXLAB_READY = true;
 </script>
 </body>

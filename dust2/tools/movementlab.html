@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>movement lab</title>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+// Movement/camera lab: the real map + the real Player/camera, rendered with a plain
+// WebGLRenderer (independent of the post-processing pipeline). Driven by tools/movementlab.mjs.
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+import { createLocalPlayer } from '../src/player/player.js';
+
+const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 960, H = +q.get('h') || 540;
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(W, H, false);
+canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(74, W / H, 1, 12000);
+World.scene = scene; World.camera = camera;
+World.input = { pitch: 0, yaw: 0, buttons: 0 };
+
+try {
+  const T = await import('../src/art/textures.js');
+  if (T?.TextureLib?.ready) await T.TextureLib.ready;
+} catch (e) { console.warn('textures unavailable', e); }
+const { buildDust2 } = await import('../src/map/dust2.js');
+const map = await buildDust2();
+scene.add(map.root);
+World.map = map; World.collision = map.collision;
+scene.background = new THREE.Color(map.ambient.sky);
+scene.add(new THREE.HemisphereLight(map.ambient.sky, map.ambient.ground, map.ambient.intensity * 1.2));
+const sun = new THREE.DirectionalLight(map.sun.color, map.sun.intensity);
+sun.position.copy(map.sun.dir).multiplyScalar(-4000);
+scene.add(sun);
+scene.fog = new THREE.FogExp2(map.fog.color, map.fog.density);
+
+const P = createLocalPlayer('T');
+World.local = P;
+const poses = await (await fetch('./poses.json')).json();
+const TI = World.tickInterval;
+let acc = 0;
+const cmd = { forwardmove: 0, sidemove: 0, upmove: 0, buttons: 0, pitch: 0, yaw: 0 };
+
+window.lab = {
+  P, World, THREE,
+  pose(name) {
+    const p = poses[name];
+    P.setPose(new THREE.Vector3(...p.eye), p.pitch ?? 0, p.yaw ?? 0);
+    World.input.pitch = p.pitch ?? 0; World.input.yaw = p.yaw ?? 0;
+  },
+  /** run `seconds` of the main loop at `hz` render rate holding `buttons` */
+  sim(seconds, buttons = 0, hz = 60) {
+    const dt = 1 / hz;
+    for (let f = 0; f < Math.round(seconds * hz); f++) {
+      acc += dt;
+      while (acc >= TI) {
+        const b = buttons;
+        cmd.buttons = b; cmd.pitch = World.input.pitch; cmd.yaw = World.input.yaw;
+        cmd.forwardmove = (b & 8 ? 450 : 0) - (b & 16 ? 450 : 0);
+        cmd.sidemove = (b & 1024 ? 450 : 0) - (b & 512 ? 450 : 0);
+        World.time += TI; P.runCommand(cmd, TI); acc -= TI;
+      }
+      World.frame++; World.alpha = acc / TI; World.dt = dt;
+      P.frame(dt, World.alpha);
+    }
+    return { y: P.origin.y, eye: P.eyeHeight, camY: camera.position.y, ducked: P.ducked, amount: P.duckAmount, ground: P.onGround };
+  },
+  render() { camera.aspect = W / H; camera.updateProjectionMatrix(); renderer.render(scene, camera); },
+};
+window.__READY = true;
+</script>
+</body>
+</html>

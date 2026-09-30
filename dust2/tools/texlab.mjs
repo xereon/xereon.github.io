@@ -85,14 +85,16 @@ async function shoot(query, out) {
   const info = await page.evaluate(() => window.__TEXLAB);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   await page.screenshot({ path: out, fullPage: true });
-  console.log(`wrote ${out}  (bake ${info.bakeMs.toFixed(0)} ms, page ${Date.now() - t0} ms, maxAniso ${info.maxAniso})`);
-  if (opt.timings) console.log(JSON.stringify(info.stats.perKey));
+  console.log(`wrote ${out}  (bake ${info.bakeMs.toFixed(0)} ms, ready ${info.readyMs.toFixed(0)} ms, page ${Date.now() - t0} ms, maxAniso ${info.maxAniso})`);
+  const bench = await page.evaluate(() => window.__BENCH);
+  if (bench) console.log(bench.join('\n'));
+  if (opt.timings) console.log(JSON.stringify(info.stats.perKey), JSON.stringify(info.stats.stages || {}));
   await page.close();
 }
 
 try {
   const base = new URLSearchParams();
-  for (const k of ['view', 'cell', 'quality', 'exposure']) if (opt[k]) base.set(k, opt[k]);
+  for (const k of ['view', 'cell', 'quality', 'exposure', 'profile', 'eager']) if (opt[k]) base.set(k, opt[k]);
   if (opt.all) {
     const keys = (opt.keys ? String(opt.keys).split(',') : null) || JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/texlab.keys.json'), 'utf8'));
     const per = +opt.per || 4;

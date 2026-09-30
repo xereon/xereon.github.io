@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Viewmodel lab</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }
+  canvas { display: block; }
+  #xh { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+  #xh i { position: absolute; background: #5f5; box-shadow: 0 0 0 1px #000; }
+  #hud { position: fixed; left: 8px; top: 6px; color: #ddd; font: 12px monospace; text-shadow: 0 1px 2px #000; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="xh"><i style="left:-10px;top:-1px;width:7px;height:2px"></i><i style="left:3px;top:-1px;width:7px;height:2px"></i><i style="left:-1px;top:-10px;width:2px;height:7px"></i><i style="left:-1px;top:3px;width:2px;height:7px"></i></div>
+<div id="hud"></div>
+<script type="module">
+// Viewmodel lab: first-person framing over a Dust-ish backdrop, turntable close-ups and
+// animation scrubbing. Driven by tools/vmlab.mjs (window.lab API) or by hand (?w=ak47&mode=fp).
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+import { Viewmodel } from '../src/weapons/viewmodel.js';
+
+const q = new URLSearchParams(location.search);
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = +(q.get('exp') || 1);
+renderer.autoClear = false;
+
+// ---- world backdrop (sunlit sandstone courtyard) ----
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(74, 16 / 9, 1, 12000);
+camera.position.set(0, 64, 0);
+{
+  const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+  const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#5f8fc9'); gr.addColorStop(0.55, '#a9c6e3'); gr.addColorStop(1, '#e9dcc4');
+  g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), new THREE.MeshStandardMaterial({ color: 0xc9ae80, roughness: 0.95 }));
+  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  const wallM = new THREE.MeshStandardMaterial({ color: 0xd4bc92, roughness: 0.9 });
+  const wallM2 = new THREE.MeshStandardMaterial({ color: 0xbfa276, roughness: 0.9 });
+  const box = (x, y, z, w, h, d, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y + h / 2, z); scene.add(b); };
+  box(-420, 0, -900, 60, 260, 1800, wallM);   // left wall down a long corridor
+  box(420, 0, -900, 60, 300, 1800, wallM2);   // right wall
+  box(0, 0, -1900, 900, 340, 60, wallM);      // end wall
+  box(-150, 0, -700, 64, 64, 64, new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.85 }));
+  box(180, 0, -1200, 96, 120, 96, new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.85 }));
+  scene.add(new THREE.HemisphereLight(0xbfd6ff, 0x8a6a45, 1.2));
+  const sun = new THREE.DirectionalLight(0xfff0d0, 3); sun.position.set(1000, 2000, 600); scene.add(sun);
+  scene.fog = new THREE.Fog(0xd8c8a8, 800, 6000);
+}
+// ---- viewmodel scene (same light rig as the baseline renderer) ----
+const viewScene = new THREE.Scene();
+const viewCamera = new THREE.PerspectiveCamera(54, 16 / 9, 0.1, 200);
+if (q.get('rig') !== 'none') {
+  viewScene.add(new THREE.HemisphereLight(0xbfd6ff, 0x8a6a45, 1.2));
+  const s = new THREE.DirectionalLight(0xfff0d0, 3); s.position.set(1000, 2000, 600); viewScene.add(s);
+}
+World.scene = scene; World.camera = camera; World.viewScene = viewScene; World.viewCamera = viewCamera;
+World.cvar.r_drawviewmodel = 1;
+
+const vm = new Viewmodel(viewScene, viewCamera);
+const ent = { team: q.get('team') || 'T', yaw: 90, pitch: 0, velocity: new THREE.Vector3(), onGround: true, duckAmount: 0, aimPunch: { pitch: 0, yaw: 0 } };
+const turnCam = new THREE.PerspectiveCamera(30, 1, 0.5, 400);
+let mode = q.get('mode') || 'fp';
+let tt = { az: 35, el: 15, dist: 1, target: null, arms: true };
+const studio = new THREE.Scene();
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = viewCamera.aspect = turnCam.aspect = w / h;
+  camera.updateProjectionMatrix(); viewCamera.updateProjectionMatrix(); turnCam.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+function step(dt, n = 1) { for (let i = 0; i < n; i++) vm.update(dt, ent); }
+function render() {
+  renderer.clear();
+  if (mode === 'fp') {
+    for (const a of Object.values(vm.armsBy)) for (const s of ['R', 'L']) a[s].mesh.visible = true;
+    document.getElementById('xh').style.display = '';
+    renderer.render(scene, camera);
+    renderer.clearDepth();
+    renderer.render(viewScene, viewCamera);
+  } else {
+    document.getElementById('xh').style.display = 'none';
+    // turntable: orbit a camera around the weapon's bounds centre in viewScene space
+    const root = vm.cur.model.root;
+    for (const a of Object.values(vm.armsBy)) for (const s of ['R', 'L']) a[s].mesh.visible = tt.arms;
+    const box = new THREE.Box3().setFromObject(root);
+    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length();
+    const d = size * 1.7 * tt.dist;
+    // orbit in the rig's local frame so angles are relative to the gun
+    const m = vm.rig.matrixWorld;
+    const dir = new THREE.Vector3(Math.sin(tt.az * Math.PI / 180) * Math.cos(tt.el * Math.PI / 180), Math.sin(tt.el * Math.PI / 180), Math.cos(tt.az * Math.PI / 180) * Math.cos(tt.el * Math.PI / 180));
+    dir.transformDirection(m);
+    turnCam.position.copy(c).addScaledVector(dir, d);
+    turnCam.up.set(0, 1, 0).transformDirection(m);
+    turnCam.lookAt(c);
+    turnCam.near = d * 0.05; turnCam.far = d * 4; turnCam.updateProjectionMatrix();
+    const bg = new THREE.Color(0x2b2d30);
+    viewScene.background = bg;
+    renderer.render(viewScene, turnCam);
+    viewScene.background = null;
+  }
+  document.getElementById('hud').textContent = q.has('nohud') ? '' : `${vm.key}  ${vm.animation}  tris ${vm.triangles}  calls ${renderer.info.render.calls}`;
+}
+
+// Isolated arm test: shows one posed arm (and its bone axes) from a chosen direction.
+import { Arm } from '../src/weapons/models/arms.js';
+let handScene = null, handCam = null, handArm = null;
+function handTest(team = 'CT', pose = 'relaxed', left = false, az = 0, el = 30, dist = 16) {
+  handScene = new THREE.Scene();
+  handScene.background = new THREE.Color(0x303236);
+  handScene.add(new THREE.HemisphereLight(0xbfd6ff, 0x8a6a45, 1.2));
+  const s = new THREE.DirectionalLight(0xfff0d0, 3); s.position.set(10, 20, 6); handScene.add(s);
+  handArm = new Arm(team, left);
+  handScene.add(handArm.mount);
+  handArm.setPose(pose);
+  handArm.mount.updateMatrixWorld(true);
+  handArm.aim(new THREE.Vector3(0, -2, 12));
+  for (const b of handArm.bones) { const ax = new THREE.AxesHelper(0.6); b.add(ax); }
+  handCam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 200);
+  const a = az * Math.PI / 180, e = el * Math.PI / 180;
+  handCam.position.set(Math.sin(a) * Math.cos(e) * dist, Math.sin(e) * dist, Math.cos(a) * Math.cos(e) * dist - 2);
+  handCam.lookAt(0, 0, -2);
+  renderer.clear(); renderer.render(handScene, handCam);
+}
+window.lab = {
+  handTest,
+  vm, ent, THREE, World, renderer,
+  set(key, team) { if (team) ent.team = team; vm.setWeapon(key); vm.play('idle'); step(1 / 60, 30); render(); return vm.triangles; },
+  fp() { mode = 'fp'; render(); },
+  turntable(az = 35, el = 15, dist = 1, arms = false) { mode = 'tt'; tt = { az, el, dist, arms }; render(); },
+  // play anim and advance to absolute time t (seconds)
+  anim(name, t) { vm.play(name); const n = Math.round(t * 60); step(1 / 60, n); render(); },
+  step(dt, n) { step(dt, n); render(); },
+  render,
+  info() { let calls = 0; return { tris: vm.triangles, calls: renderer.info.render.calls, anim: vm.animation }; },
+};
+lab.set(q.get('w') || 'ak47', q.get('team'));
+if (q.get('anim')) lab.anim(q.get('anim'), +(q.get('t') || 0.5));
+if (mode !== 'fp') lab.turntable(+(q.get('az') || 35), +(q.get('el') || 15));
+if (q.has('live')) {
+  let last = performance.now();
+  const loop = (now) => { const dt = Math.min(0.05, (now - last) / 1000); last = now; ent.yaw += 0; step(dt); render(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+window.__READY = true;
+</script>
+</body>
+</html>

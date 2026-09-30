@@ -78,3 +78,23 @@ export function buildSkeleton() {
   const skeleton = new THREE.Skeleton(bones, inverses);
   return { bones, skeleton, root: bones[0] };
 }
+
+// ---- hand frames ------------------------------------------------------------------------------
+// Hands are modelled as fists around a grip in hand-local space: x = fingers (wrist -> knuckles),
+// y = thumb side, z = back of the hand (mirrored for the left hand). The hole through the fist
+// runs along y and is centred at GRIP_LOCAL.
+export const GRIP_LOCAL = v(2.35, 0.1, -1.45);
+
+/** Bind-pose hand frame: fingers along the forearm, thumb pointing forward (+X). */
+export function handBindFrame(side) {
+  const A = side === 'L' ? ARM_L : ARM_R;
+  const xh = A.dF.clone();
+  const yh = v(1, 0, 0).addScaledVector(xh, -xh.x).normalize();
+  const zh = new THREE.Vector3().crossVectors(xh, yh);
+  const mirror = side === 'L' ? -1 : 1;
+  const M = new THREE.Matrix4().makeBasis(xh, yh, zh);
+  // grip centre relative to the wrist, in bind (model) space
+  const grip = v(GRIP_LOCAL.x, GRIP_LOCAL.y, GRIP_LOCAL.z * mirror).applyMatrix4(M);
+  return { xh, yh, zh, M, mirror, grip };
+}
+export const HAND_L = handBindFrame('L'), HAND_R = handBindFrame('R');

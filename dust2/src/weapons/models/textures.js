@@ -141,21 +141,21 @@ function scratchField(size, count, seed, maxLen = 0.25, dirBias = null) {
 // ---- recipes -----------------------------------------------------------------------------------
 // Generic worked metal: mottling, oily smudges, micro grain, fine scratches.
 export function metalSet({ key = 'metal', base = [0.23, 0.23, 0.24], rough = 0.45, metal = 0.8, var: vr = 0.18,
-  smudge = 0.18, grain = 1, scratches = 90, size = 512 } = {}) {
+  smudge = 0.18, grain = 1, scratches = 26, size = 512 } = {}) {
   const k = `metal:${key}`;
   if (cache.has(k)) return cache.get(k);
-  const sc = scratchField(size, scratches, 1234 + key.length * 77, 0.18);
-  return generate(k, size, 2.2 * grain, (u, v, o, x, y) => {
+  const sc = scratchField(size, scratches, 1234 + key.length * 77, 0.12);
+  return generate(k, size, 0.9 * grain, (u, v, o, x, y) => {
     const mott = fbm(u, v, 4, 4, 5, 11);
     const fine = fbm(u, v, 48, 48, 3, 23);
     const sm = fbm(u, v, 3, 3, 4, 31);
-    const pits = sstep(0.72, 0.85, fbm(u, v, 64, 64, 2, 41));
-    const s = sc[y * size + x];
-    const m = 1 + (mott - 0.5) * vr * 2 + (fine - 0.5) * 0.08 - pits * 0.1;
-    o.r = base[0] * m + s * 0.18; o.g = base[1] * m + s * 0.18; o.b = base[2] * m + s * 0.18;
-    o.rough = rough + (sm - 0.5) * smudge * 2 + (fine - 0.5) * 0.06 - s * 0.18 + pits * 0.08;
-    o.metal = metal + s * 0.2;
-    o.h = fine * 0.35 * grain - pits * 0.4 - s * 0.6;
+    const pits = sstep(0.8, 0.9, fbm(u, v, 64, 64, 2, 41)) * 0.5;
+    const s = sc[y * size + x] * 0.6;
+    const m = 1 + (mott - 0.5) * vr * 2 + (fine - 0.5) * 0.06 - pits * 0.06;
+    o.r = base[0] * m + s * 0.08; o.g = base[1] * m + s * 0.08; o.b = base[2] * m + s * 0.08;
+    o.rough = rough + (sm - 0.5) * smudge * 2 + (fine - 0.5) * 0.05 - s * 0.12 + pits * 0.05;
+    o.metal = metal + s * 0.15;
+    o.h = fine * 0.25 * grain - pits * 0.25 - s * 0.3;
   });
 }
 
@@ -165,38 +165,40 @@ export function brushedSet({ key = 'brushed', base = [0.68, 0.68, 0.67], rough =
   if (cache.has(k)) return cache.get(k);
   const sc = scratchField(size, 60, 555, 0.2);
   return generate(k, size, 1.4, (u, v, o, x, y) => {
-    const streak = fbm(u, v, 1, 180, 3, 5) * 0.6 + fbm(u, v, 2, 420, 2, 9) * 0.4;
+    const streak = fbm(u, v, 2, 64, 2, 5) * 0.5 + fbm(u, v, 4, 128, 2, 9) * 0.5;
     const mott = fbm(u, v, 3, 3, 4, 13);
     const s = sc[y * size + x];
-    const m = 0.94 + (streak - 0.5) * 0.14 + (mott - 0.5) * 0.12;
+    const m = 0.97 + (streak - 0.5) * 0.05 + (mott - 0.5) * 0.08;
     o.r = base[0] * m; o.g = base[1] * m; o.b = base[2] * m;
-    o.rough = rough + (streak - 0.5) * 0.14 + (mott - 0.5) * 0.12 - s * 0.1;
+    o.rough = rough + (streak - 0.5) * 0.06 + (mott - 0.5) * 0.1 - s * 0.08;
     o.metal = 1;
-    o.h = streak * 0.5 - s * 0.5;
+    o.h = streak * 0.15 - s * 0.3;
   });
 }
 
-// Wood: grain runs along U. Laminated AK-style or oiled walnut.
+// Wood: straight grain running along U (gun length), gentle waviness, fibre streaks, pores,
+// optional laminate layers (AKM plywood look). `rings` = grain lines per tile across V.
 export function woodSet({ key = 'wood', dark = [0.24, 0.08, 0.035], light = [0.52, 0.22, 0.09], rough = 0.42,
   rings = 22, lam = 0, size = 512 } = {}) {
   const k = `wood:${key}`;
   if (cache.has(k)) return cache.get(k);
-  return generate(k, size, 2.4, (u, v, o) => {
-    const warp = fbm(u, v, 2, 6, 4, 3) * 2.2 + fbm(u, v, 1, 2, 2, 8) * 1.5;
-    const r = (v * rings + warp * 2.4);
+  return generate(k, size, 1.2, (u, v, o) => {
+    const warp = (fbm(u, v, 1, 2, 3, 3) - 0.5) * 0.9 + (fbm(u, v, 3, 5, 3, 8) - 0.5) * 0.35;
+    const r = v * rings + warp * 2.2;
     const ring = r - Math.floor(r);
-    const late = sstep(0.0, 0.12, ring) * (1 - sstep(0.45, 0.95, ring));
-    const fig = fbm(u, v, 3, 12, 4, 19);
-    const pore = sstep(0.62, 0.8, fbm(u, v, 24, 220, 2, 27));
-    const lamLine = lam ? sstep(0.8, 0.98, Math.abs(Math.sin(v * Math.PI * lam + fig * 0.6))) : 0;
-    let t = 0.25 + late * 0.45 + (fig - 0.5) * 0.5 + lamLine * 0.2;
+    const late = Math.pow(sstep(0.55, 0.95, ring) * (1 - sstep(0.95, 1.0, ring)), 0.8);
+    const fibre = fbm(u, v, 2, 90, 3, 11);
+    const fig = fbm(u, v, 2, 4, 4, 19);
+    const pore = sstep(0.72, 0.86, fbm(u, v, 20, 200, 2, 27)) * 0.5;
+    const lamBand = lam ? 0.5 + 0.5 * Math.sin((v * lam + (fbm(u, v, 1, 2, 2, 31) - 0.5) * 0.3) * Math.PI * 2) : 0.5;
+    let t = 0.55 - late * 0.38 + (fibre - 0.5) * 0.3 + (fig - 0.5) * 0.3 + (lamBand - 0.5) * 0.18;
     t = clamp01(t);
     o.r = dark[0] + (light[0] - dark[0]) * t; o.g = dark[1] + (light[1] - dark[1]) * t; o.b = dark[2] + (light[2] - dark[2]) * t;
-    const pd = 1 - pore * 0.35;
+    const pd = 1 - pore * 0.3;
     o.r *= pd; o.g *= pd; o.b *= pd;
-    o.rough = rough + pore * 0.25 + (1 - late) * 0.06;
+    o.rough = rough + pore * 0.2 + late * 0.05 + (fig - 0.5) * 0.08;
     o.metal = 0;
-    o.h = late * 0.35 - pore * 0.6 + fig * 0.1;
+    o.h = -late * 0.25 - pore * 0.5 + fibre * 0.15;
   });
 }
 
@@ -223,7 +225,7 @@ export function polymerSet({ key = 'poly', base = [0.13, 0.13, 0.135], rough = 0
 export function paintSet({ key = 'paint', base = [0.3, 0.33, 0.2], rough = 0.55, size = 256, orange = 0.6 } = {}) {
   const k = `paint:${key}`;
   if (cache.has(k)) return cache.get(k);
-  return generate(k, size, 1.6, (u, v, o) => {
+  return generate(k, size, 0.5, (u, v, o) => {
     const mott = fbm(u, v, 4, 4, 5, 51);
     const peel = fbm(u, v, 16, 16, 3, 53);
     const m = 1 + (mott - 0.5) * 0.22;
@@ -238,7 +240,7 @@ export function paintSet({ key = 'paint', base = [0.3, 0.33, 0.2], rough = 0.55,
 export function fabricSet({ key = 'fabric', base = [0.16, 0.17, 0.16], rough = 0.85, freq = 64, size = 512, camo = null } = {}) {
   const k = `fabric:${key}`;
   if (cache.has(k)) return cache.get(k);
-  return generate(k, size, 2.6, (u, v, o) => {
+  return generate(k, size, 1.6, (u, v, o) => {
     const fu = u * freq, fv = v * freq;
     const iu = Math.floor(fu), iv = Math.floor(fv);
     const tu = fu - iu, tv = fv - iv;
@@ -253,7 +255,7 @@ export function fabricSet({ key = 'fabric', base = [0.16, 0.17, 0.16], rough = 0
       const cm = fbm(u, v, 3, 3, 4, 91);
       c = cm < 0.42 ? camo[0] : cm < 0.56 ? camo[1] : camo[2];
     }
-    const m = 0.82 + thread * 0.22 + (fiber - 0.5) * 0.12 + (mott - 0.5) * 0.18 + sstep(0.6, 0.8, wear) * 0.12;
+    const m = 0.9 + thread * 0.1 + (fiber - 0.5) * 0.1 + (mott - 0.5) * 0.16 + sstep(0.6, 0.8, wear) * 0.1;
     o.r = c[0] * m; o.g = c[1] * m; o.b = c[2] * m;
     o.rough = rough + (1 - thread) * 0.08;
     o.metal = 0;
@@ -271,7 +273,7 @@ export function leatherSet({ key = 'leather', base = [0.13, 0.11, 0.1], rough = 
     const crease = sstep(0.0, 0.12, f2 - f1);
     const mott = fbm(u, v, 5, 5, 4, 83);
     const wear = sstep(0.55, 0.75, fbm(u, v, 8, 8, 3, 87));
-    const m = 0.85 + crease * 0.18 + (mott - 0.5) * 0.25 + wear * 0.15;
+    const m = 0.9 + crease * 0.12 + (mott - 0.5) * 0.16 + wear * 0.08;
     o.r = base[0] * m; o.g = base[1] * m; o.b = base[2] * m;
     o.rough = rough + (1 - crease) * 0.12 - wear * 0.12 + (mott - 0.5) * 0.1;
     o.metal = 0;
@@ -322,19 +324,19 @@ export function knurlSet({ key = 'knurl', base = [0.12, 0.12, 0.12], rough = 0.5
   });
 }
 
-// Vertical ribs/grooves (AK bakelite grip), grooves vary along U.
+// Vertical ribs/grooves (AK bakelite grip): rounded ridges, narrow grooves, varying along U.
 export function ribSet({ key = 'ribs', base = [0.3, 0.1, 0.05], rough = 0.36, freq = 20, size = 256 } = {}) {
-  return generate(`ribs:${key}`, size, 3, (u, v, o) => {
+  return generate(`ribs:${key}`, size, 1.4, (u, v, o) => {
     const t = u * freq;
-    const g = Math.abs(t - Math.round(t)) * 2;
-    const rib = sstep(0.18, 0.5, g);
+    const c = 0.5 + 0.5 * Math.cos((t - Math.floor(t)) * Math.PI * 2);
+    const rib = Math.pow(c, 0.35);
     const mott = fbm(u, v, 4, 4, 4, 113);
     const fine = fbm(u, v, 48, 48, 2, 117);
-    const m = 0.8 + rib * 0.25 + (mott - 0.5) * 0.3;
+    const m = 0.78 + rib * 0.22 + (mott - 0.5) * 0.2;
     o.r = base[0] * m; o.g = base[1] * m; o.b = base[2] * m;
-    o.rough = rough + (1 - rib) * 0.12 + (fine - 0.5) * 0.08;
+    o.rough = rough + (1 - rib) * 0.15 + (fine - 0.5) * 0.08;
     o.metal = 0;
-    o.h = rib + fine * 0.1;
+    o.h = rib * 0.8 + fine * 0.1;
   });
 }
 

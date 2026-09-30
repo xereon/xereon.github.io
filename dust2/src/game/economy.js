@@ -36,6 +36,8 @@ export const FALLBACK_ITEMS = {
   tec9:         I('Tec-9', 500, 300, 'T', 'secondary', 'pistol', { mag: 18, reserve: 90, dmg: 33, rpm: 500, pen: 90.6 }),
   fiveseven:    I('Five-SeveN', 500, 300, 'CT', 'secondary', 'pistol', { mag: 20, reserve: 100, dmg: 32, rpm: 400, pen: 91.2 }),
   deagle:       I('Desert Eagle', 700, 300, null, 'secondary', 'pistol', { mag: 7, reserve: 35, dmg: 53, rpm: 267, pen: 93.2 }),
+  cz75:         I('CZ75-Auto', 500, 100, null, 'secondary', 'pistol', { mag: 12, reserve: 24, dmg: 31, rpm: 600, pen: 77.6 }),
+  mp7:          I('MP7', 1500, 600, null, 'primary', 'smg', { mag: 30, reserve: 120, dmg: 29, rpm: 750, pen: 62.5 }),
   mac10:        I('MAC-10', 1050, 600, 'T', 'primary', 'smg', { mag: 30, reserve: 100, dmg: 29, rpm: 800, pen: 57.5 }),
   mp9:          I('MP9', 1250, 600, 'CT', 'primary', 'smg', { mag: 30, reserve: 120, dmg: 26, rpm: 857, pen: 60 }),
   mp5sd:        I('MP5-SD', 1500, 600, null, 'primary', 'smg', { mag: 30, reserve: 120, dmg: 27, rpm: 750, pen: 62.5 }),
@@ -78,15 +80,15 @@ export const MAX_GRENADES = 4;
 export const BUY_LAYOUT = {
   T: [
     { id: 'gear', label: 'Gear', items: ['kevlar', 'kevlarhelmet', 'taser'] },
-    { id: 'pistols', label: 'Pistols', items: ['glock', 'dualberettas', 'p250', 'tec9', 'deagle'] },
-    { id: 'mid', label: 'Mid-Tier', items: ['mac10', 'mp5sd', 'ump45', 'p90', 'nova', 'xm1014', 'negev', 'm249'], split: 4 },
+    { id: 'pistols', label: 'Pistols', items: ['glock', 'dualberettas', 'p250', 'tec9', 'cz75', 'deagle'] },
+    { id: 'mid', label: 'Mid-Tier', items: ['mac10', 'mp7', 'mp5sd', 'ump45', 'p90', 'nova', 'xm1014', 'negev', 'm249'], split: 5 },
     { id: 'rifles', label: 'Rifles', items: ['galil', 'ak47', 'ssg08', 'sg553', 'awp', 'g3sg1'] },
     { id: 'grenades', label: 'Grenades', items: ['flashbang', 'smokegrenade', 'hegrenade', 'molotov', 'decoy'] },
   ],
   CT: [
     { id: 'gear', label: 'Gear', items: ['kevlar', 'kevlarhelmet', 'taser', 'defusekit'] },
-    { id: 'pistols', label: 'Pistols', items: ['usp', 'dualberettas', 'p250', 'fiveseven', 'deagle'] },
-    { id: 'mid', label: 'Mid-Tier', items: ['mp9', 'mp5sd', 'ump45', 'p90', 'nova', 'xm1014', 'mag7', 'negev', 'm249'], split: 4 },
+    { id: 'pistols', label: 'Pistols', items: ['usp', 'dualberettas', 'p250', 'fiveseven', 'cz75', 'deagle'] },
+    { id: 'mid', label: 'Mid-Tier', items: ['mp9', 'mp7', 'mp5sd', 'ump45', 'p90', 'nova', 'xm1014', 'mag7', 'negev', 'm249'], split: 5 },
     { id: 'rifles', label: 'Rifles', items: ['famas', 'm4a4', 'm4a1s', 'ssg08', 'aug', 'awp', 'scar20'] },
     { id: 'grenades', label: 'Grenades', items: ['flashbang', 'smokegrenade', 'hegrenade', 'incgrenade', 'decoy'] },
   ],
@@ -153,7 +155,7 @@ export function owns(ent, key) {
   }
   if (it.slot === 'primary') return keyOf(inv.primary) === key;
   if (it.slot === 'secondary') return keyOf(inv.secondary) === key;
-  if (it.slot === 'grenade') return (grenadeCounts(ent)[key] || 0) >= (it.max || 1);
+  if (it.slot === 'grenade') return (grenadeCounts(ent)[key] || 0) > 0;
   return false;
 }
 
@@ -179,12 +181,11 @@ export function canBuy(ent, key) {
   const price = effectivePrice(ent, key);
   if (it.team && team && it.team !== team) return { ok: false, reason: 'team', price };
   if (key === 'defusekit' && team !== 'CT') return { ok: false, reason: 'team', price };
-  if (owns(ent, key)) return { ok: false, reason: 'owned', price };
   if (it.slot === 'grenade') {
     const c = grenadeCounts(ent);
     if ((c[key] || 0) >= (it.max || 1)) return { ok: false, reason: 'type_limit', price };
     if (c.total >= MAX_GRENADES) return { ok: false, reason: 'grenade_limit', price };
-  }
+  } else if (owns(ent, key)) return { ok: false, reason: 'owned', price };
   if ((ent?.money ?? 0) < price) return { ok: false, reason: 'money', price };
   return { ok: true, reason: null, price };
 }

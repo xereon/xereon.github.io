@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Render Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>html, body { margin: 0; background: #000; overflow: hidden; } canvas { display: block; }</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script type="module">
+// Render lab (see tools/renderlab.mjs):  ?view=street|courtyard|passage|crates|overview|skyline
+//   &quality=low|medium|high|ultra   &vm=0 to hide the dummy viewmodel
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+import '../src/core/cvars.js';
+import { applyViewAngles } from '../src/core/mathx.js';
+import { RenderPipeline } from '../src/engine/renderer.js';
+import { TextureLib } from '../src/art/textures.js';
+import { buildLab, buildViewmodelDummy, LAB_VIEWS } from './renderlab_scene.js';
+
+const P = new URLSearchParams(location.search);
+World.params = P;
+World.quality = P.get('quality') || 'high';
+async function main() {
+  const t0 = performance.now();
+  const rp = new RenderPipeline(document.getElementById('game'));
+  World.renderer = rp; World.scene = rp.scene; World.camera = rp.camera;
+  World.viewScene = rp.viewScene; World.viewCamera = rp.viewCamera;
+  rp.setQuality(World.quality);
+  await TextureLib.ready;
+  const map = buildLab({ plain: P.get('mat') === 'plain' });
+  World.map = map; World.collision = map.collision;
+  rp.scene.add(map.root);
+  const t1 = performance.now();
+  await rp.setMap(map);
+  const t2 = performance.now();
+  if (P.get('vm') !== '0') rp.viewScene.add(buildViewmodelDummy());
+  window.setView = (name) => {
+    const v = typeof name === 'string' ? LAB_VIEWS[name] : name;
+    rp.camera.position.set(...v.eye);
+    applyViewAngles(rp.camera, v.pitch, v.yaw, 0);
+    rp.camera.updateMatrixWorld();
+  };
+  window.setView(P.get('view') || 'street');
+  await rp.precompile();
+  window.__LAB = { rp, timings: { texturesMs: Math.round(t1 - t0), setMapMs: Math.round(t2 - t1), gi: rp.gi.stats } };
+  // on-demand rendering (SwiftShader is slow); ?loop=1 for a continuous loop
+  window.renderFrames = (n = 1, profile = false) => {
+    rp.profile = profile;
+    const t = performance.now();
+    for (let i = 0; i < n; i++) rp.render(1 / 60);
+    const gl = rp.renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    rp.profile = false;
+    return { ms: (performance.now() - t) / n, passes: rp.lastProfile, calls: rp.renderer.info.render.calls, tris: rp.renderer.info.render.triangles };
+  };
+  // debug: time the world pass pieces separately
+  window.probeWorld = () => {
+    const r = rp.renderer, gl = r.getContext(), px = new Uint8Array(4);
+    const syncRT = new THREE.WebGLRenderTarget(1, 1);
+    const sync = () => { r.setRenderTarget(syncRT); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+    const out = {};
+    rp.camera.updateMatrixWorld(); rp.shadows.update(rp.camera);
+    sync();
+    let t = performance.now();
+    r.shadowMap.needsUpdate = true;
+    // shadows only: render into the tiny RT with everything but casters hidden is awkward; instead
+    // measure a full world render with and without shadow updates
+    r.setRenderTarget(rp.sceneRT); r.clear(); r.render(rp.scene, rp.camera); sync();
+    out.worldWithShadows = performance.now() - t;
+    const au = r.shadowMap.autoUpdate; r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = false;
+    t = performance.now(); r.setRenderTarget(rp.sceneRT); r.clear(); r.render(rp.scene, rp.camera); sync();
+    out.worldNoShadowUpdate = performance.now() - t;
+    r.shadowMap.autoUpdate = au;
+    const ov = rp.scene.overrideMaterial;
+    rp.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x888888 });
+    r.shadowMap.autoUpdate = false;
+    t = performance.now(); r.setRenderTarget(rp.sceneRT); r.clear(); r.render(rp.scene, rp.camera); sync();
+    out.worldBasicMat = performance.now() - t;
+    const timeWith = (m) => {
+      rp.scene.overrideMaterial = m; r.shadowMap.autoUpdate = false;
+      r.setRenderTarget(rp.sceneRT); r.clear(); r.render(rp.scene, rp.camera); sync(); // compile
+      const t0 = performance.now(); r.setRenderTarget(rp.sceneRT); r.clear(); r.render(rp.scene, rp.camera); sync();
+      return performance.now() - t0;
+    };
+    out.stdUnpatched = timeWith(new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 }));
+    const pm = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });
+    rp.setupMaterial(pm);
+    out.stdPatched = timeWith(pm);
+    rp.scene.overrideMaterial = ov; r.shadowMap.autoUpdate = au;
+    return out;
+  };
+  if (P.get('loop')) {
+    let last = performance.now();
+    const loop = (t) => { requestAnimationFrame(loop); const dt = Math.min(0.1, (t - last) / 1000); last = t; World.time += dt; rp.render(dt); };
+    requestAnimationFrame(loop);
+  }
+  window.__READY = true;
+}
+main().catch((e) => { console.error(e); window.__BOOT_ERROR = String(e.stack || e); });
+</script>
+</body>
+</html>

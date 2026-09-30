@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DUST II — HUD lab</title>
+<link rel="stylesheet" href="../src/game/ui.css" />
+<script type="importmap">{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }</script>
+<style>#bg { position: fixed; inset: 0; background: #6d7f8f center / cover no-repeat; }</style>
+</head>
+<body>
+<div id="bg"></div>
+<canvas id="game" style="position:fixed;inset:0;opacity:0"></canvas>
+<div id="hud-root"></div>
+<div id="ui-root"></div>
+<script type="module">
+// WebGL-free HUD lab: the real HUD/menu modules over a captured game frame (tools/game_lab.mjs).
+import * as THREE from 'three';
+import { World } from '../src/core/world.js';
+const params = new URLSearchParams(location.search);
+World.harness = true;
+World.params = params;
+if (params.get('bg')) document.getElementById('bg').style.backgroundImage = `url(${params.get('bg')})`;
+World.camera = new THREE.PerspectiveCamera(73.74, innerWidth / innerHeight, 1, 12000);
+World.input = { yaw: +(params.get('yaw') || 0), pitch: 0, buttons: 0, locked: false, lock() {}, unlock() {} };
+const v = (a) => new THREE.Vector3(a.x, a.y, a.z);
+const zone = (z) => z && { min: v(z.min), max: v(z.max), name: z.name };
+try {
+  const d = await (await fetch(params.get('map') || '/mapdump.json')).json();
+  World.map = {
+    walkable: new Float32Array(d.walkable || []),
+    bombsites: { A: zone(d.bombsites?.A), B: zone(d.bombsites?.B) },
+    buyzones: { T: zone(d.buyzones?.T), CT: zone(d.buyzones?.CT) },
+    callouts: Object.fromEntries(Object.entries(d.callouts || {}).map(([k, z]) => [k, zone(z)])),
+    spawns: { T: (d.spawns?.T || []).map((s) => ({ pos: v(s.pos), yaw: s.yaw })), CT: (d.spawns?.CT || []).map((s) => ({ pos: v(s.pos), yaw: s.yaw })) },
+    root: new THREE.Group(),
+  };
+  if (d.nav) World.nav = { count: d.nav.count, px: Float32Array.from(d.nav.px), py: Float32Array.from(d.nav.py), pz: Float32Array.from(d.nav.pz) };
+  if (d.eye) World.camera.position.set(...d.eye);
+  if (d.yaw != null && !params.get('yaw')) World.input.yaw = d.yaw;
+} catch (e) { console.warn('no map dump', e); }
+const { Hud } = await import('../src/game/hud.js');
+const { MatchController } = await import('../src/game/rules.js');
+World.hud = new Hud(document.getElementById('hud-root'));
+World.match = new MatchController();
+World.emit('ready', {});
+let last = performance.now();
+function frame(now) { requestAnimationFrame(frame); const dt = Math.min(0.1, (now - last) / 1000); last = now; World.dt = dt; World.hud.update(dt); }
+requestAnimationFrame(frame);
+window.__harness = { frames: (n = 1) => new Promise((res) => { let l = n; const s = () => (--l <= 0 ? res() : requestAnimationFrame(s)); requestAnimationFrame(s); }) };
+window.__READY = true;
+</script>
+</body>
+</html>

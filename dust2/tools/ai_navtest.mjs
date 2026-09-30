@@ -23,7 +23,7 @@ export function testWorld() {
   cw.addBox(V(-800, 0, -700), V(-400, 150, -684)); cw.addBox(V(-800, 0, -540), V(-400, 150, -524));
   // stairs up to a platform at y=128 (8 steps of 16u, 24u deep) rising toward -z, at x 400..560
   for (let i = 0; i < 8; i++) cw.addBox(V(400, 0, -200 - i * 24), V(560, 16 * (i + 1), -176 - i * 24));
-  cw.addBox(V(400, 0, -600), V(700, 128, -392));                         // platform A (stairs top)
+  cw.addBox(V(400, 0, -600), V(700, 128, -368));                         // platform A (stairs top)
   // ramp up to platform B (y=96) along +x, at z 700..860, 45° max -> 160 long rising 96
   cw.addWedge(V(300, 0, 700), V(460, 96, 860), 'x', 1);
   cw.addBox(V(460, 0, 700), V(700, 96, 1000));                            // platform B
@@ -41,7 +41,7 @@ export function testWorld() {
       west: zone([-1200, -10, -1200], [0, 200, 1200], 'west'),
       east: zone([0, -10, -1200], [1200, 200, 1200], 'east'),
       corridor: zone([-800, -10, -684], [-400, 150, -540], 'corridor'),
-      platA: zone([400, 100, -600], [700, 200, -392], 'platA'),
+      platA: zone([400, 100, -600], [700, 200, -368], 'platA'),
     },
     walkable: new Float32Array(),
   };

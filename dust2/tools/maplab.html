@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Map lab</title>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/jsm/" } }
+</script>
+<style>html,body{margin:0;background:#fff}canvas{display:block}#wrap{position:relative}#lbl{position:absolute;left:0;top:0}</style>
+</head>
+<body>
+<div id="wrap"><canvas id="gl"></canvas><canvas id="lbl"></canvas></div>
+<script type="module">
+// Top-down orthographic check of the map: walkable floors coloured by height, walls from the
+// render meshes, callout labels. Optional radar underlay (?radar=<dataurl> set by maplab.mjs)
+// using the de_dust2 overview transform (pos_x -2476, pos_y 3239, scale 4.4).
+import * as THREE from 'three';
+import { buildDust2 } from '../src/map/dust2.js';
+
+const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 1400;
+const mode = q.get('mode') || 'height';   // 'height' | 'render'
+// Source bounds shown
+const X0 = -2476, Y1 = 3239, SPAN = 4.4 * 1024;
+const H = W;
+
+const gl = document.getElementById('gl'), lbl = document.getElementById('lbl');
+gl.width = lbl.width = W; gl.height = lbl.height = H;
+const renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setClearColor(0xffffff, 0);
+const scene = new THREE.Scene();
+// Ortho camera looking straight down (-Y in Three), north (Source +y = Three -z) up on screen.
+const cam = new THREE.OrthographicCamera(X0, X0 + SPAN, -(Y1 - SPAN) * 1 - 0, -Y1, -5000, 5000);
+// screen up must be Three -z: build manually
+cam.left = X0; cam.right = X0 + SPAN; cam.top = Y1; cam.bottom = Y1 - SPAN;
+cam.position.set(0, 3000, 0);
+cam.up.set(0, 0, -1);
+cam.lookAt(0, 0, 0);
+cam.updateProjectionMatrix();
+
+async function main() {
+  let textures = null;
+  if (q.has('tex')) {
+    const T = (await import('../src/art/textures.js')).TextureLib;
+    const { World } = await import('../src/core/world.js');
+    World.renderer = { renderer };
+    await T.ready; textures = T;
+  }
+  const map = await buildDust2({ textures, props: undefined });
+  if (mode === 'pose') {
+    // quick perspective check of a named pose without the game's post stack
+    const { applyViewAngles } = await import('../src/core/mathx.js');
+    const poses = await (await fetch('./poses.json')).json();
+    const pc = new THREE.PerspectiveCamera(74, (+q.get('pw') || W) / (+q.get('ph') || H), 2, 12000);
+    renderer.setSize(+q.get('pw') || W, +q.get('ph') || H, false);
+    scene.add(map.root);
+    scene.background = new THREE.Color(0x9fc4e8);
+    scene.fog = new THREE.Fog(0xd9ccb0, 2500, 9000);
+    scene.add(new THREE.HemisphereLight(0xbcd4f2, 0x8a7458, 1.3));
+    const sun = new THREE.DirectionalLight(0xfff0d8, 2.6);
+    sun.position.copy(map.sun.dir).multiplyScalar(-4000); sun.target.position.set(0, 0, 0);
+    sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+    Object.assign(sun.shadow.camera, { left: -3000, right: 3000, top: 3000, bottom: -3000, near: 10, far: 9000 });
+    sun.shadow.bias = -0.0004;
+    renderer.shadowMap.enabled = true;
+    scene.add(sun, sun.target);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    window.__pose = (name) => {
+      const p = poses[name];
+      pc.position.set(...p.eye);
+      applyViewAngles(pc, p.pitch ?? 0, p.yaw ?? 0, 0);
+      if (p.fov) { pc.fov = p.fov; }
+      pc.updateProjectionMatrix();
+      renderer.render(scene, pc);
+      return true;
+    };
+    window.__poses = Object.keys(poses);
+    window.__DONE = true;
+    return;
+  }
+  if (mode === 'render') {
+    scene.add(map.root);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 2.2));
+    const d = new THREE.DirectionalLight(0xffffff, 1.5); d.position.set(0.4, 1, 0.3); scene.add(d);
+  } else {
+    // walkable floors coloured by height (Three y), semi-transparent over the radar
+    const pos = map.walkable;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const col = new Float32Array(pos.length);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.length; i += 3) {
+      const t = THREE.MathUtils.clamp((pos[i + 1] + 210) / 340, 0, 1);
+      c.setHSL(0.66 - 0.66 * t, 0.85, 0.5);
+      col[i] = c.r; col[i + 1] = c.g; col[i + 2] = c.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: q.has('radar') ? 0.55 : 0.9 })));
+    // wall tops in black: any render triangle whose normal is horizontal-ish, drawn as lines
+    map.root.traverse((o) => {
+      if (!o.isMesh || !o.geometry.index) return;
+      const e = new THREE.EdgesGeometry(o.geometry, 60);
+      scene.add(new THREE.LineSegments(e, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 })));
+    });
+  }
+  renderer.render(scene, cam);
+  // labels
+  const ctx = lbl.getContext('2d');
+  const toPx = (x, y) => [(x - X0) / SPAN * W, (Y1 - y) / SPAN * H];
+  ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+  for (const [name, z] of Object.entries(map.callouts)) {
+    if (['tunnels', 'lower_mid', 'b_window_ct'].includes(name)) continue;
+    const cx = (z.min.x + z.max.x) / 2, cy = -(z.min.z + z.max.z) / 2;
+    const [px, py] = toPx(cx, cy);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    const w = ctx.measureText(name).width + 6;
+    ctx.fillRect(px - w / 2, py - 9, w, 14);
+    ctx.fillStyle = '#000'; ctx.fillText(name, px, py + 2);
+  }
+  for (const [team, list] of Object.entries(map.spawns)) for (const s of list) {
+    const [px, py] = toPx(s.pos.x, -s.pos.z);
+    ctx.fillStyle = team === 'T' ? '#c33' : '#33c';
+    ctx.beginPath(); ctx.arc(px, py, 3, 0, 7); ctx.fill();
+  }
+  window.__DONE = true;
+}
+main().catch((e) => { window.__ERR = String(e.stack || e); });
+</script>
+</body>
+</html>

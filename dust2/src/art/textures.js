@@ -22,7 +22,7 @@ import { Dbg } from '../core/debug.js';
 import { Baker } from './gpu.js';
 import { installPatch, atNoiseTexture } from './antitile.js';
 import { DEFS, DECALS, DETAIL, FALLBACK } from './gen/index.js';
-import { LIB } from './gen/lib.js';
+import { LIB, LIB_GROUND, LIB_WOOD } from './gen/lib.js';
 
 const state = {
   renderer: null,
@@ -86,12 +86,15 @@ function readBack(r, baked, size, def) {
   return out;
 }
 
-async function generateAll() {
-  const t0 = performance.now();
-  if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') {
-    state.stats.mode = 'flat';
-    return;
-  }
+// ---- baking ------------------------------------------------------------------------------
+// ready: sets up the baker and compiles every material's field shader in parallel
+// (KHR_parallel_shader_compile where available). Materials, decals and the detail normal
+// are baked lazily on first material()/maps()/decal()/detailNormal() request, synchronously (GPU work is queued, not waited on), so
+// GPU time is only spent on surfaces the map actually uses. ?texeager bakes everything.
+
+function initBaker() {
+  if (state.baker || state.stats.mode === 'flat') return state.baker;
+  if (typeof document === 'undefined' && typeof OffscreenCanvas === 'undefined') { state.stats.mode = 'flat'; return null; }
   let r = resolveRenderer();
   let own = false;
   if (!r) {
@@ -102,57 +105,87 @@ async function generateAll() {
     } catch (e) {
       Dbg.warn('TextureLib: no WebGL, using flat colours', e);
       state.stats.mode = 'flat';
-      return;
+      return null;
     }
   }
   state.stats.mode = own ? 'readback' : 'gpu';
+  state.own = own;
+  state.r = r;
   const baker = new Baker(r);
+  baker.profile = !!state.profile;
   const q = World.quality || 'high';
-  const maxA = baker.maxAniso;
-  const aniso = own ? 8 : Math.min(maxA, q === 'low' ? 2 : q === 'medium' ? 8 : 16);
-  const qs = qualityScale();
-
-  // decals + detail normal are baked like materials (their own defs)
-  const jobs = [];
-  for (const [key, def] of Object.entries(DEFS)) jobs.push({ kind: 'mat', key, def });
-  for (const [key, def] of Object.entries(DECALS)) jobs.push({ kind: 'decal', key, def });
-  jobs.push({ kind: 'detail', key: 'detail_normal', def: DETAIL });
-
-  for (const j of jobs) {
+  state.aniso = own ? 8 : Math.min(baker.maxAniso, q === 'low' ? 2 : q === 'medium' ? 8 : 16);
+  state.qs = qualityScale();
+  state.jobs = new Map();
+  const add = (kind, key, def) => state.jobs.set(key, { kind, key, def });
+  for (const [key, def] of Object.entries(DEFS)) add('mat', key, def);
+  for (const [key, def] of Object.entries(DECALS)) add('decal', key, def);
+  add('detail', 'detail_normal', DETAIL);
+  for (const j of state.jobs.values()) {
     j.def.key = j.key;
-    j.def.lib = LIB;
-    j.size = Math.max(64, Math.round((j.def.size || (j.def.hero ? 1024 : 512)) * qs));
-    j.canvasTex = drawCanvas(j.def, j.size);
-    j.fieldMat = baker.fieldMaterial(j.def, j.size, j.canvasTex);
+    j.def.lib = LIB + LIB_GROUND + LIB_WOOD;
+    j.size = Math.max(64, Math.round((j.def.size || (j.def.hero ? 1024 : 512)) * state.qs));
   }
-  await baker.precompile(jobs.map((j) => j.fieldMat));
+  state.baker = baker;
+  return baker;
+}
 
-  let i = 0;
-  for (const j of jobs) {
-    const tk = performance.now();
-    let baked;
-    try {
-      baked = baker.bake(j.def, j.size, j.fieldMat, j.def.aniso === false ? 1 : aniso);
-      if (own) baked = readBack(r, baked, j.size, j.def);
-    } catch (e) {
-      console.error(`[TextureLib] bake failed for ${j.key}`, e);
-      baked = null;
-    }
-    j.fieldMat.dispose();
-    j.canvasTex?.dispose();
-    if (baked) {
-      if (j.kind === 'mat') { state.baked.set(j.key, baked); bindLate(j.key); }
-      else if (j.kind === 'decal') state.decals.set(j.key, finishDecal(baked, j.def));
-      else state.detail = baked.normalMap;
-    }
-    state.stats.perKey[j.key] = +(performance.now() - tk).toFixed(1);
-    // yield now and then so the boot overlay can paint
-    if (++i % 6 === 0) await new Promise((res) => setTimeout(res, 0));
+function prepare(j) {
+  if (!j.fieldMat) {
+    j.canvasTex = drawCanvas(j.def, j.size);
+    j.fieldMat = state.baker.fieldMaterial(j.def, j.size, j.canvasTex);
   }
-  baker.dispose();
-  if (own) r.dispose();
+  return j.fieldMat;
+}
+
+function bakeJob(j) {
+  if (j.done) return;
+  j.done = true;
+  const baker = state.baker, r = state.r;
+  const tk = performance.now();
+  let baked = null;
+  try {
+    baked = baker.bake(j.def, j.size, prepare(j), j.def.aniso === false ? 1 : state.aniso);
+    if (state.profile) {   // force GPU completion for honest per-material timings
+      const px = new Uint8Array(4);
+      r.readRenderTargetPixels(baked.target, 0, 0, 1, 1, px);
+    }
+    if (state.own) baked = readBack(r, baked, j.size, j.def);
+  } catch (e) {
+    console.error(`[TextureLib] bake failed for ${j.key}`, e);
+    baked = null;
+  }
+  j.fieldMat?.dispose();
+  j.canvasTex?.dispose();
+  j.fieldMat = j.canvasTex = null;
+  if (baked) {
+    if (j.kind === 'mat') { state.baked.set(j.key, baked); bindLate(j.key); }
+    else if (j.kind === 'decal') state.decals.set(j.key, finishDecal(baked, j.def));
+    else state.detail = baked.normalMap;
+  }
+  state.stats.perKey[j.key] = +(performance.now() - tk).toFixed(1);
+  state.stats.baked = (state.stats.baked || 0) + 1;
+}
+
+// Bake one key now if possible (no-op before ready has set up the baker, or in Node).
+function ensure(key) {
+  if (state.baked.has(key) || !state.baker) return;
+  const j = state.jobs.get(key);
+  if (j) bakeJob(j);
+}
+
+async function generateAll() {
+  const t0 = performance.now();
+  const baker = initBaker();
+  if (!baker) return;
+  const eager = World.params?.has?.('texeager') || state.eager;
+  const jobs = [...state.jobs.values()];
+  await baker.precompile(jobs.filter((j) => j.kind === 'mat').map(prepare));
+  if (eager) for (const j of jobs) bakeJob(j);
+  // anything requested before ready (e.g. material() at import time) bakes now
+  for (const key of state.byKey.keys()) ensure(key);
   state.stats.ms = +(performance.now() - t0).toFixed(1);
-  Dbg.log('[TextureLib] baked', jobs.length, 'maps in', state.stats.ms, 'ms', state.stats.mode);
+  Dbg.log('[TextureLib] ready in', state.stats.ms, 'ms', state.stats.mode);
 }
 
 function finishDecal(baked, def) {
@@ -224,6 +257,7 @@ function createMaterial(key, o) {
       antiTile: o.antiTile ?? !!def.antiTile,
       macro: o.macro != null ? [o.macro, o.macro * 0.4] : def.macro,
       macroScale: def.macroScale,
+      blendDepth: def.blendDepth,
       world,
       repeat: o.repeat,
       offset: o.offset,
@@ -249,10 +283,17 @@ export const TextureLib = {
 
   /** Optional: bake on this WebGLRenderer instead of World.renderer.renderer. */
   setRenderer(r) { state.renderer = r?.isWebGLRenderer ? r : r?.renderer || null; },
+  /** Debug: sync the GPU after every bake so stats().perKey is real GPU time. */
+  setProfile(on) { state.profile = !!on; },
+  /** Bake every material during ready instead of on first use (labs, benchmarks). */
+  setEager(on) { state.eager = !!on; },
+  /** Bake these keys now (e.g. during a loading screen) so first use never hitches. */
+  preload(keys) { for (const k of keys) ensure(k); },
 
   keys() { return Object.keys(DEFS); },
 
   material(key, opts = {}) {
+    ensure(key);
     const o = normOpts(opts);
     const ck = key + JSON.stringify(o);
     let m = state.mats.get(ck);
@@ -261,6 +302,7 @@ export const TextureLib = {
   },
 
   maps(key) {
+    ensure(key);
     const b = state.baked.get(key);
     if (!b) return {};
     return {
@@ -275,8 +317,8 @@ export const TextureLib = {
     return d ? { world: d.world, surface: d.surface, hero: !!d.hero, metal: !!d.metal, alpha: !!d.mat?.alphaTest || !!d.mat?.transparent } : null;
   },
 
-  decal(type) { return state.decals.get(type) || null; },
+  decal(type) { ensure(type); return state.decals.get(type) || null; },
   decalTypes() { return Object.keys(DECALS); },
-  detailNormal() { return state.detail; },
-  stats() { return state.stats; },
+  detailNormal() { ensure('detail_normal'); return state.detail; },
+  stats() { if (state.baker?.stages) state.stats.stages = state.baker.stages; return state.stats; },
 };
