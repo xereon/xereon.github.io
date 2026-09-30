@@ -1,0 +1,4 @@
+{
+  "overview": { "eye": [0, 1600, 1800], "pitch": 40, "yaw": 0, "desc": "Placeholder overhead — map agent replaces all poses" },
+  "t_spawn": { "eye": [0, 64, 0], "pitch": 0, "yaw": 0, "desc": "Placeholder" }
+}

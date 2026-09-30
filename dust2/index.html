@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DUST II</title>
+  <meta name="description" content="A browser tactical shooter on a from-scratch recreation of the Dust II layout, built in Three.js." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23c9a15c'/%3E%3Cpath d='M32 12v40M12 32h40' stroke='%23201810' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='14' fill='none' stroke='%23201810' stroke-width='5'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./src/game/ui.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game" tabindex="0"></canvas>
+  <div id="hud-root"></div>
+  <div id="ui-root"></div>
+  <div id="boot" class="boot">
+    <div class="boot-inner">
+      <div class="boot-title">DUST II</div>
+      <div class="boot-bar"><div class="boot-fill" id="boot-fill"></div></div>
+      <div class="boot-status" id="boot-status">Initialising…</div>
+    </div>
+  </div>
+  <noscript>This game needs JavaScript and WebGL2.</noscript>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

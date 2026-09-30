@@ -1,0 +1,10 @@
+/* BASELINE — game/HUD agent owns and replaces this file. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+canvas#game { display: block; width: 100vw; height: 100vh; outline: none; }
+#hud-root, #ui-root { position: fixed; inset: 0; pointer-events: none; }
+.boot { position: fixed; inset: 0; display: grid; place-items: center; background: #14110d; color: #e8dcc4; font: 600 14px/1.4 system-ui, sans-serif; transition: opacity .6s; z-index: 100; }
+.boot.done { opacity: 0; pointer-events: none; }
+.boot-title { font-size: 48px; letter-spacing: .35em; margin-bottom: 24px; }
+.boot-bar { width: 360px; height: 4px; background: #2a241c; }
+.boot-fill { height: 100%; width: 0; background: #d4a857; transition: width .3s; }
+.boot-status { margin-top: 12px; opacity: .7; }
