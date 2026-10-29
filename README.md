@@ -10,7 +10,6 @@ Jekyll is disabled (`.nojekyll`) so the file is served exactly as written.
 | Project | Live | Source |
 | --- | --- | --- |
 | **SPECTRA** — audio-reactive 3D music visualizer | [demo](https://xereon.github.io/spectra-visualizer/) | [repo](https://github.com/xereon/spectra-visualizer) |
-| **TELLY** — mobile-first IPTV browser | [demo](https://xereon.github.io/telly-iptv/) | [repo](https://github.com/xereon/telly-iptv) |
 
 ## Editing
 
